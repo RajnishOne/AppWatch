@@ -262,14 +262,11 @@ If you installed `openmediavault-docker-gui`:
 Data is stored in Docker volume `notifier-data`. To backup:
 
 ```bash
-# Find volume location
-docker volume inspect app-store-watcher_notifier-data
+# Backup data directory
+tar czf /docker-data/backup/watcher-backup-$(date +%Y%m%d).tar.gz -C /docker-data/app-store-watcher data/
 
-# Backup
-docker run --rm \
-  -v app-store-watcher_notifier-data:/data \
-  -v /sharedfolders/backup:/backup \
-  alpine tar czf /backup/watcher-backup-$(date +%Y%m%d).tar.gz /data
+# Or backup entire directory
+tar czf /docker-data/backup/app-store-watcher-full-$(date +%Y%m%d).tar.gz -C /docker-data app-store-watcher/
 ```
 
 ---
@@ -361,21 +358,28 @@ chmod -R 755 /opt/app-store-watcher
 
 ## Recommended Directory Structure on OMV
 
+Following your existing Docker setup pattern (matching Jellyfin structure):
+
 ```
-/opt/app-store-watcher/          # Main project directory
+/docker-data/app-store-watcher/    # Matches your /docker-data/jellyfin/ pattern
 ├── backend/
 ├── frontend/
-│   └── dist/                    # Built frontend
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
-└── README.md
+└── data/                          # Created automatically, stores app configs and versions
+    ├── apps.json
+    └── apps/
+        └── <app-id>/
+            ├── version.txt
+            ├── current_version.txt
+            └── check.txt
 ```
 
-Or use a shared folder:
-```
-/sharedfolders/docker/app-store-watcher/
-```
+**Benefits:**
+- Consistent with your existing Docker setup
+- Easy to backup (just backup `/docker-data/app-store-watcher/`)
+- All Docker app data in one place
 
 ---
 

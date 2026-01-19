@@ -19,11 +19,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Frontend source (we only need the build)
-frontend/src/
-frontend/public/
-frontend/package.json
-frontend/package-lock.json
+# Frontend - we build it in Docker, but ignore node_modules
+frontend/node_modules/
+frontend/build/
 
 # IDE
 .vscode/
