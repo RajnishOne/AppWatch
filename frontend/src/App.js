@@ -162,7 +162,7 @@ function App() {
   return (
     <div className="container">
       <div className="header">
-        <h1>App Store Release Watcher</h1>
+        <h1>App Release Watcher</h1>
         <p>Monitor iOS App Store apps for new releases and post to Discord</p>
       </div>
 

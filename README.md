@@ -114,7 +114,7 @@ Supported section headers: New, Added, Improvements, Fixed, Changes
 
 ## Data Storage
 
-App data and version tracking is stored in `/docker-data/app-store-watcher/data/`:
+App data and version tracking is stored in `/docker-data/app-release-watcher/data/`:
 - `data/apps.json` - App configurations
 - `data/apps/<APP_ID>/version.txt` - Last posted version
 - `data/apps/<APP_ID>/check.txt` - Last check timestamp
@@ -143,6 +143,11 @@ npm start
 Follow the Quick Start guide above.
 
 ### OMV (OpenMediaVault) Server
+
+**Option 1: OMV Compose Plugin (Easiest - Just Paste YAML)**
+See [OMV_COMPOSE_PLUGIN.md](OMV_COMPOSE_PLUGIN.md) - No cloning needed, just paste the YAML in the web UI!
+
+**Option 2: SSH Deployment**
 **Quick Start:** See [OMV_QUICK_START.md](OMV_QUICK_START.md) for exact step-by-step instructions.
 
 **Detailed Guide:** See [DEPLOY_OMV.md](DEPLOY_OMV.md) for comprehensive deployment options.

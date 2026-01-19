@@ -32,7 +32,8 @@ if not os.path.exists(static_folder):
     static_folder = None
 
 app = Flask(__name__, static_folder=static_folder, static_url_path='')
-CORS(app)
+# CORS - allow all origins for self-hosted use (restrict in production if needed)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Initialize components
 storage = StorageManager(Path('/data'))
@@ -67,20 +68,40 @@ def get_default_interval():
 
 def parse_interval(interval_str):
     """Parse interval string like '12h', '30m', '1d' to seconds"""
-    interval_str = interval_str.lower().strip()
+    if not interval_str:
+        raise ValueError("Interval string cannot be empty")
     
-    if interval_str.endswith('h'):
-        hours = int(interval_str[:-1])
-        return hours * 3600
-    elif interval_str.endswith('m'):
-        minutes = int(interval_str[:-1])
-        return minutes * 60
-    elif interval_str.endswith('d'):
-        days = int(interval_str[:-1])
-        return days * 86400
-    else:
-        # Assume seconds if no suffix
-        return int(interval_str)
+    interval_str = str(interval_str).lower().strip()
+    
+    if not interval_str:
+        raise ValueError("Interval string cannot be empty")
+    
+    try:
+        if interval_str.endswith('h'):
+            hours = int(interval_str[:-1])
+            if hours <= 0:
+                raise ValueError("Hours must be positive")
+            return hours * 3600
+        elif interval_str.endswith('m'):
+            minutes = int(interval_str[:-1])
+            if minutes <= 0:
+                raise ValueError("Minutes must be positive")
+            return minutes * 60
+        elif interval_str.endswith('d'):
+            days = int(interval_str[:-1])
+            if days <= 0:
+                raise ValueError("Days must be positive")
+            return days * 86400
+        else:
+            # Assume seconds if no suffix
+            seconds = int(interval_str)
+            if seconds <= 0:
+                raise ValueError("Seconds must be positive")
+            return seconds
+    except ValueError as e:
+        if "invalid literal" in str(e).lower():
+            raise ValueError(f"Invalid interval format: {interval_str}. Use format like: 6h, 30m, 1d")
+        raise
 
 
 def format_interval(seconds):
@@ -208,6 +229,9 @@ def get_apps():
 @app.route('/api/apps', methods=['POST'])
 def create_app():
     """Create a new app"""
+    if not request.json:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    
     data = request.json
     
     required_fields = ['name', 'app_store_id', 'webhook_url']
@@ -215,45 +239,94 @@ def create_app():
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
     
+    # Input validation
+    name = str(data['name']).strip()
+    app_store_id = str(data['app_store_id']).strip()
+    webhook_url = str(data['webhook_url']).strip()
+    
+    if not name:
+        return jsonify({'error': 'App name cannot be empty'}), 400
+    if not app_store_id or not app_store_id.isdigit():
+        return jsonify({'error': 'App Store ID must be a number'}), 400
+    if not webhook_url.startswith('https://discord.com/api/webhooks/'):
+        return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+    
+    # Validate interval if provided
+    interval_override = data.get('interval_override', '').strip() if data.get('interval_override') else None
+    if interval_override:
+        try:
+            parse_interval(interval_override)
+        except (ValueError, AttributeError):
+            return jsonify({'error': 'Invalid interval format. Use format like: 6h, 30m, 1d'}), 400
+    
     app_data = {
-        'name': data['name'],
-        'app_store_id': data['app_store_id'],
-        'webhook_url': data['webhook_url'],
-        'interval_override': data.get('interval_override'),
+        'name': name,
+        'app_store_id': app_store_id,
+        'webhook_url': webhook_url,
+        'interval_override': interval_override,
         'enabled': data.get('enabled', True)
     }
     
-    app_id = save_app(app_data)
-    setup_scheduler()  # Reschedule
-    
-    return jsonify({'id': app_id, **app_data}), 201
+    try:
+        app_id = save_app(app_data)
+        setup_scheduler()  # Reschedule
+        return jsonify({'id': app_id, **app_data}), 201
+    except Exception as e:
+        logger.error(f"Error creating app: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to create app'}), 500
 
 
 @app.route('/api/apps/<app_id>', methods=['PUT'])
 def update_app(app_id):
     """Update an app"""
+    if not request.json:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    
     data = request.json
     
     app = storage.get_app(app_id)
     if not app:
         return jsonify({'error': 'App not found'}), 404
     
-    # Update fields
+    # Update fields with validation
     if 'name' in data:
-        app['name'] = data['name']
+        name = str(data['name']).strip()
+        if not name:
+            return jsonify({'error': 'App name cannot be empty'}), 400
+        app['name'] = name
+    
     if 'app_store_id' in data:
-        app['app_store_id'] = data['app_store_id']
+        app_store_id = str(data['app_store_id']).strip()
+        if not app_store_id or not app_store_id.isdigit():
+            return jsonify({'error': 'App Store ID must be a number'}), 400
+        app['app_store_id'] = app_store_id
+    
     if 'webhook_url' in data:
-        app['webhook_url'] = data['webhook_url']
+        webhook_url = str(data['webhook_url']).strip()
+        if not webhook_url.startswith('https://discord.com/api/webhooks/'):
+            return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+        app['webhook_url'] = webhook_url
+    
     if 'interval_override' in data:
-        app['interval_override'] = data['interval_override']
+        interval_override = data['interval_override']
+        if interval_override:
+            interval_override = str(interval_override).strip()
+            try:
+                parse_interval(interval_override)
+            except (ValueError, AttributeError):
+                return jsonify({'error': 'Invalid interval format. Use format like: 6h, 30m, 1d'}), 400
+        app['interval_override'] = interval_override if interval_override else None
+    
     if 'enabled' in data:
-        app['enabled'] = data['enabled']
+        app['enabled'] = bool(data['enabled'])
     
-    save_app(app)
-    setup_scheduler()  # Reschedule
-    
-    return jsonify(app)
+    try:
+        save_app(app)
+        setup_scheduler()  # Reschedule
+        return jsonify(app)
+    except Exception as e:
+        logger.error(f"Error updating app {app_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to update app'}), 500
 
 
 @app.route('/api/apps/<app_id>', methods=['DELETE'])
@@ -288,9 +361,15 @@ def get_logs():
 
 
 # Initialize scheduler when module loads
-setup_scheduler()
+# Wrap in try-except to handle errors gracefully
+try:
+    setup_scheduler()
+except Exception as e:
+    logger.error(f"Failed to initialize scheduler: {e}", exc_info=True)
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    port = int(os.getenv('PORT', 8192))
+    # Use production WSGI server in production (gunicorn recommended)
+    # For self-hosted, Flask dev server is acceptable
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
 
