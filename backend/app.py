@@ -360,6 +360,117 @@ def get_logs():
     return jsonify({'logs': []})
 
 
+@app.route('/api/export', methods=['GET'])
+def export_config():
+    """Export all apps configuration as JSON"""
+    try:
+        apps = load_apps()
+        # Remove status fields for clean export
+        export_data = []
+        for app in apps:
+            export_app = {
+                'name': app.get('name'),
+                'app_store_id': app.get('app_store_id'),
+                'webhook_url': app.get('webhook_url'),
+                'interval_override': app.get('interval_override'),
+                'enabled': app.get('enabled', True)
+            }
+            export_data.append(export_app)
+        
+        return jsonify({
+            'apps': export_data,
+            'exported_at': datetime.now().isoformat(),
+            'version': '1.0'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error exporting config: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/import', methods=['POST'])
+def import_config():
+    """Import apps configuration from JSON"""
+    try:
+        if not request.json:
+            return jsonify({'error': 'Request body must be JSON'}), 400
+        
+        data = request.json
+        
+        # Validate structure
+        if 'apps' not in data or not isinstance(data['apps'], list):
+            return jsonify({'error': 'Invalid import format. Expected {"apps": [...]}'}), 400
+        
+        imported_count = 0
+        errors = []
+        
+        for app_data in data['apps']:
+            try:
+                # Validate required fields
+                required_fields = ['name', 'app_store_id', 'webhook_url']
+                for field in required_fields:
+                    if field not in app_data:
+                        errors.append(f"App '{app_data.get('name', 'unknown')}' missing field: {field}")
+                        continue
+                
+                # Validate and create app
+                name = str(app_data['name']).strip()
+                app_store_id = str(app_data['app_store_id']).strip()
+                webhook_url = str(app_data['webhook_url']).strip()
+                
+                if not name:
+                    errors.append(f"App has empty name")
+                    continue
+                if not app_store_id or not app_store_id.isdigit():
+                    errors.append(f"App '{name}' has invalid App Store ID")
+                    continue
+                if not webhook_url.startswith('https://discord.com/api/webhooks/'):
+                    errors.append(f"App '{name}' has invalid webhook URL")
+                    continue
+                
+                # Validate interval if provided
+                interval_override = app_data.get('interval_override', '').strip() if app_data.get('interval_override') else None
+                if interval_override:
+                    try:
+                        parse_interval(interval_override)
+                    except (ValueError, AttributeError):
+                        errors.append(f"App '{name}' has invalid interval format")
+                        continue
+                
+                # Save app
+                import_app_data = {
+                    'name': name,
+                    'app_store_id': app_store_id,
+                    'webhook_url': webhook_url,
+                    'interval_override': interval_override,
+                    'enabled': app_data.get('enabled', True)
+                }
+                
+                save_app(import_app_data)
+                imported_count += 1
+                
+            except Exception as e:
+                errors.append(f"Error importing app: {str(e)}")
+                logger.error(f"Error importing app: {e}", exc_info=True)
+        
+        # Reschedule after import
+        setup_scheduler()
+        
+        result = {
+            'success': True,
+            'imported': imported_count,
+            'total': len(data['apps'])
+        }
+        
+        if errors:
+            result['errors'] = errors
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error importing config: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 # Initialize scheduler when module loads
 # Wrap in try-except to handle errors gracefully
 try:

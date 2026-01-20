@@ -69,6 +69,71 @@ function App() {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/export`);
+      if (response.ok) {
+        const data = await response.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `app-release-watcher-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showMessage(`Exported ${data.apps.length} app(s) successfully`);
+      } else {
+        const error = await response.json();
+        showMessage(error.error || 'Failed to export', 'error');
+      }
+    } catch (error) {
+      showMessage('Error exporting: ' + error.message, 'error');
+    }
+  };
+
+  const handleImport = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (!confirm(`Import ${data.apps?.length || 0} app(s)? This will add them to your existing apps.`)) {
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/api/import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        if (result.errors && result.errors.length > 0) {
+          showMessage(`Imported ${result.imported}/${result.total} apps. Some errors occurred.`, 'error');
+          console.error('Import errors:', result.errors);
+        } else {
+          showMessage(`Successfully imported ${result.imported} app(s)`);
+        }
+        loadApps();
+      } else {
+        showMessage(result.error || 'Failed to import', 'error');
+      }
+    } catch (error) {
+      showMessage('Error importing: ' + error.message, 'error');
+    }
+
+    // Reset file input
+    event.target.value = '';
+  };
+
   const handleCheckApp = async (appId) => {
     setChecking({ ...checking, [appId]: true });
     try {
@@ -172,10 +237,22 @@ function App() {
         </div>
       )}
 
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn btn-primary" onClick={handleAddApp}>
           + Add App
         </button>
+        <button className="btn btn-secondary" onClick={handleExport}>
+          📥 Export Config
+        </button>
+        <label className="btn btn-secondary" style={{ margin: 0, cursor: 'pointer' }}>
+          📤 Import Config
+          <input
+            type="file"
+            accept=".json"
+            style={{ display: 'none' }}
+            onChange={handleImport}
+          />
+        </label>
       </div>
 
       {apps.length === 0 ? (
