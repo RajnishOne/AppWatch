@@ -1,25 +1,24 @@
 # App Store Release Watcher
 
-A self-hosted multi-app App Store release notifier with a Web UI and Docker Compose deployment. Monitor multiple iOS App Store apps for new releases and automatically post formatted release notes to Discord via webhook.
+Monitor iOS App Store apps for new releases and get notified in Discord. Simple web interface to manage multiple apps.
 
-## Features
+## What It Does
 
-- 🍎 Monitor multiple iOS App Store apps
-- 📝 Smart Discord formatting for release notes
-- 🔄 Automatic scheduling with per-app intervals
-- 🚫 Duplicate prevention (tracks last posted version)
-- 🖥️ Web UI for easy configuration
-- 🐳 Docker Compose deployment
-- ⚡ Manual check and post buttons
-- 🔔 Automatic Discord notifications via webhooks
+- 🍎 Monitors iOS App Store apps for new versions
+- 🔔 Sends notifications to Discord when updates are found
+- 🖥️ Easy-to-use web interface
+- 🔄 Checks for updates automatically on a schedule
+- ⚡ Manual check and post buttons for testing
 
-## Integration Guide
+## Getting Started
 
-### Step 1: Get the Application
+### Step 1: Set Up Docker
 
-**Option A: Using Pre-built Docker Image (Easiest)**
+If you don't have Docker installed, download it from [docker.com](https://www.docker.com/get-started).
 
-Create a `docker-compose.yml` file:
+### Step 2: Create the Configuration File
+
+Create a file named `docker-compose.yml` in a folder on your computer. Copy and paste this content:
 
 ```yaml
 services:
@@ -30,333 +29,130 @@ services:
     ports:
       - "8192:8192"
     volumes:
-      - /docker-data/app-release-watcher/data:/data
+      - ./data:/data
 ```
 
-**Option B: Clone from GitHub (For Development/Contributing)**
+**Note:** The `./data` folder will be created automatically to store your app settings.
+
+### Step 3: Start the Application
+
+Open a terminal (Command Prompt on Windows, Terminal on Mac/Linux) in the folder where you created `docker-compose.yml` and run:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/app-release-watcher.git
-cd app-release-watcher
+docker compose up -d
 ```
 
-*Replace `YOUR_USERNAME` with the actual GitHub username or organization name*
+Wait a few seconds for it to start, then open your web browser and go to:
 
-### Step 2: Set Up Discord Webhook
+**http://localhost:8192**
+
+### Step 4: Set Up Discord Webhook
+
+Before adding apps, you need a Discord webhook:
 
 1. Open your Discord server
 2. Go to **Server Settings** → **Integrations** → **Webhooks**
 3. Click **New Webhook** or **Create Webhook**
-4. Configure the webhook:
-   - Choose a channel where you want release notifications
-   - Name your webhook (e.g., "App Store Releases")
-   - Optionally customize the avatar
-5. Click **Copy Webhook URL** - you'll need this later
-   - Webhook URL format: `https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN`
+4. Choose the channel where you want notifications
+5. Name it (e.g., "App Releases")
+6. Click **Copy Webhook URL** and save it somewhere
 
-### Step 3: Find App Store ID
+### Step 5: Find App Store ID
 
-1. Open the App Store (web or app)
+1. Go to [apps.apple.com](https://apps.apple.com) in your browser
 2. Search for the app you want to monitor
-3. Navigate to the app's page
-4. Look at the URL: `https://apps.apple.com/app/id123456789`
-5. The number after `/id` is your App Store ID (e.g., `123456789`)
-
-### Step 4: Deploy the Application
-
-**Option A: Using Docker Compose (Recommended)**
-
-```bash
-docker compose up -d
-```
-
-**Option B: Using Docker Run**
-
-```bash
-docker run -d \
-  --name app-release-watcher \
-  --restart unless-stopped \
-  -p 8192:8192 \
-  -v /docker-data/app-release-watcher/data:/data \
-  rajnishdock/app-release-watcher:latest
-```
-
-**Option C: Build from Source**
-
-1. Build frontend:
-```bash
-# On Linux/Mac
-./build.sh
-
-# On Windows
-build.bat
-
-# Or manually:
-cd frontend
-npm install
-npm run build
-cd ..
-```
-
-2. Build and run:
-```bash
-docker compose build
-docker compose up -d
-```
-
-### Step 5: Access the Web UI
-
-Open your browser and navigate to: **http://localhost:8192**
+3. Open the app's page
+4. Look at the URL - it will look like: `https://apps.apple.com/app/id123456789`
+5. Copy the number after `/id` (that's your App Store ID)
 
 ### Step 6: Add Your First App
 
-1. Click the **"Add App"** button
-2. Fill in the form:
-   - **App Name**: A friendly name (e.g., "My Awesome App")
-   - **App Store ID**: The ID you found in Step 3 (e.g., `123456789`)
-   - **Discord Webhook URL**: The webhook URL you copied in Step 2
-   - **Check Interval** (optional): How often to check for updates (e.g., `6h`, `30m`, `1d`)
-     - Default: `12h` (checks every 12 hours)
-     - Format: Use `h` for hours, `m` for minutes, `d` for days
-3. Click **"Add App"**
+1. In the web interface (http://localhost:8192), click **"Add App"**
+2. Fill in:
+   - **App Name**: Any name you want (e.g., "My App")
+   - **App Store ID**: The number you found in Step 5
+   - **Notification Destination**: Select "Discord"
+   - **Discord Webhook URL**: Paste the webhook URL from Step 4
+   - **Check Interval** (optional): Leave empty for default (12 hours), or use `6h`, `1d`, etc.
+3. Click **"Save"**
 
-### Step 7: Verify Integration
+### Step 7: Test It
 
-1. **Test Check**: Click the **"Check"** button next to your app to manually check for updates
-2. **Test Post**: Click the **"Post"** button to manually send the current version to Discord
-3. **Monitor**: The app will automatically check for updates at the configured interval
-4. **Notifications**: When a new version is detected, it will automatically post formatted release notes to your Discord channel
+1. Click **"Check Now"** to see if it finds the current version
+2. Click **"Post Now"** to send a test message to Discord
+3. If everything works, the app will check for updates automatically
 
-### Step 8: Add More Apps (Optional)
+You can add more apps by clicking **"Add App"** again. Each app can use a different Discord channel.
 
-Repeat Step 6 to monitor multiple apps. Each app can have its own:
-- Discord webhook URL (different channels)
-- Check interval (different update frequencies)
+## How It Works
 
-## Quick Start (TL;DR)
+The app checks the App Store for new versions of your apps. When it finds an update, it sends the release notes to your Discord channel.
 
-For experienced users who just need the commands:
+- **Default check interval**: Every 12 hours
+- **Custom intervals**: You can set different intervals per app (e.g., `6h` for 6 hours, `1d` for daily)
+- **Manual checks**: Use the "Check Now" button anytime
+- **No duplicates**: It remembers what version was last posted, so you won't get the same update twice
+
+## Stopping the App
+
+To stop the app:
 
 ```bash
-# Clone and start
-git clone https://github.com/YOUR_USERNAME/app-release-watcher.git
-cd app-release-watcher
+docker compose down
+```
+
+To start it again:
+
+```bash
 docker compose up -d
-
-# Access UI at http://localhost:8192
-# Add apps via the web interface
 ```
 
-## Configuration
+## Your Data
 
-### Environment Variables
-
-You can customize the application behavior using environment variables:
-
-```bash
-# In docker-compose.yml or docker run command
-environment:
-  - CHECK_INTERVAL=12h    # Default check interval for all apps
-  - TZ=Asia/Kolkata       # Timezone for logging
-  - PORT=8192             # Server port
-```
-
-**Available Variables:**
-- `CHECK_INTERVAL`: Default check interval for apps without custom intervals (default: `12h`)
-- `TZ`: Timezone for timestamps and logging (default: `Asia/Kolkata`)
-- `PORT`: Server port number (default: `8192`)
-
-### Per-App Settings
-
-Each app can be configured individually through the web UI:
-
-- **App Name**: Display name for identification
-- **App Store ID**: Unique identifier from the App Store URL
-- **Discord Webhook URL**: Where notifications will be posted
-- **Check Interval**: Override the default interval (e.g., `6h`, `30m`, `1d`)
-- **Enabled**: Toggle to enable/disable monitoring for specific apps
-
-### Webhook URL Format
-
-Discord webhook URLs must follow this format:
-```
-https://discord.com/api/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN
-```
-
-If you're using a different Discord domain (e.g., `discordapp.com`), make sure to update it to `discord.com`.
-
-## Release Notes Formatting
-
-The system automatically formats release notes for Discord:
-
-### Case A: Generic Text
-```
-# v2.3.1
-
-**This release includes:**
-- Bug fixes
-- Improvements
-```
-
-### Case B: Structured Sections
-```
-# v2.3.1
-
-**New**
-- Feature A
-- Feature B
-
-**Improvements**
-- Optimization X
-
-**Fixed**
-- Crash issue
-```
-
-Supported section headers: New, Added, Improvements, Fixed, Changes
-
-## API Endpoints
-
-- `GET /api/apps` - List all apps
-- `POST /api/apps` - Create new app
-- `PUT /api/apps/:id` - Update app
-- `DELETE /api/apps/:id` - Delete app
-- `POST /api/apps/:id/check` - Manually check app
-- `POST /api/apps/:id/post` - Manually post to Discord
-- `GET /api/status` - Health check
-
-## Data Storage
-
-App data and version tracking is stored in `/docker-data/app-release-watcher/data/` (mapped from container `/data`):
-- `data/apps.json` - App configurations
-- `data/apps/<APP_ID>/version.txt` - Last posted version
-- `data/apps/<APP_ID>/check.txt` - Last check timestamp
-
-Make sure the host directory exists and has proper permissions before starting the container.
-
-## Development
-
-### Backend
-
-```bash
-cd backend
-pip install -r ../requirements.txt
-python -m backend.app
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm start
-```
-
-## Docker Image
-
-Pre-built Docker images are available on Docker Hub:
-- **Image:** `rajnishdock/app-release-watcher:latest`
-- **Tags:** `latest` and version tags (e.g., `v1.0.0`)
-
-Images are automatically built and published via GitHub Actions when version tags are pushed to the repository.
-
-## Deployment Options
-
-### Local Machine
-Follow the Quick Start guide above using Docker Compose.
-
-### Docker Run (Alternative)
-
-```bash
-docker run -d \
-  --name app-release-watcher \
-  --restart unless-stopped \
-  -p 8192:8192 \
-  -v /docker-data/app-release-watcher/data:/data \
-  rajnishdock/app-release-watcher:latest
-```
-
-### OMV (OpenMediaVault) Server
-
-**Option 1: OMV Compose Plugin (Easiest - Just Paste YAML)**
-See [OMV_COMPOSE_PLUGIN.md](OMV_COMPOSE_PLUGIN.md) - No cloning needed, just paste the YAML in the web UI!
-
-**Option 2: SSH Deployment**
-**Quick Start:** See [OMV_QUICK_START.md](OMV_QUICK_START.md) for exact step-by-step instructions.
-
-**Detailed Guide:** See [DEPLOY_OMV.md](DEPLOY_OMV.md) for comprehensive deployment options.
-
-## Detailed Usage Guide
-
-For step-by-step instructions, see [USAGE.md](USAGE.md)
+All your app settings are saved in the `data` folder in the same directory as your `docker-compose.yml` file. If you delete this folder, you'll lose your settings.
 
 ## Troubleshooting
 
-### Container Won't Start
+### Can't Access the Web Interface
 
-- **Check port availability**: Ensure port `8192` is not already in use
-  ```bash
-  # Linux/Mac
-  lsof -i :8192
-  
-  # Windows
-  netstat -ano | findstr :8192
-  ```
+- Make sure Docker is running
+- Check that port 8192 isn't being used by another program
+- Try restarting: `docker compose restart`
 
-- **Check data directory permissions**: Ensure the data directory exists and is writable
-  ```bash
-  mkdir -p /docker-data/app-release-watcher/data
-  chmod 755 /docker-data/app-release-watcher/data
-  ```
+### Discord Notifications Not Working
 
-### Discord Webhook Not Working
+- Make sure your webhook URL is correct (starts with `https://discord.com/api/webhooks/`)
+- Check that the webhook wasn't deleted in Discord
+- Try clicking "Post Now" to test manually
+- Make sure the Discord channel allows webhooks
 
-- **Verify webhook URL**: Ensure it starts with `https://discord.com/api/webhooks/`
-- **Test webhook manually**: Use curl to test:
-  ```bash
-  curl -X POST -H "Content-Type: application/json" \
-    -d '{"content":"Test message"}' \
-    YOUR_WEBHOOK_URL
-  ```
-- **Check Discord channel permissions**: Ensure the webhook has permission to post in the channel
-- **Webhook deleted**: If you deleted the webhook, create a new one and update the app configuration
+### App Not Finding Updates
 
-### App Not Detecting Updates
-
-- **Manual check**: Use the "Check" button to test immediately
-- **Verify App Store ID**: Double-check the ID is correct
-- **Check logs**: View container logs for errors
-  ```bash
-  docker logs app-release-watcher
-  ```
-- **Interval too long**: Reduce the check interval to test more frequently
+- Double-check the App Store ID is correct (just the numbers)
+- Click "Check Now" to test immediately
+- Wait a bit - sometimes the App Store API is slow
 
 ### Common Errors
 
 **"Invalid Discord webhook URL"**
-- Make sure the URL starts with `https://discord.com/api/webhooks/`
-- Copy the entire URL from Discord without any spaces
+- Make sure you copied the entire URL from Discord
+- It should start with `https://discord.com/api/webhooks/`
 
 **"App Store ID must be a number"**
-- The App Store ID should only contain digits (e.g., `123456789`)
-- Remove any non-numeric characters from the URL
+- Only use the numbers from the App Store URL
+- Example: If the URL is `apps.apple.com/app/id123456789`, use `123456789`
 
 **"Invalid interval format"**
-- Use format: `30m` (minutes), `6h` (hours), `1d` (days)
-- Examples: `30m`, `2h`, `12h`, `1d`, `7d`
+- Use: `30m` (30 minutes), `6h` (6 hours), `1d` (1 day)
+- Leave it empty to use the default (12 hours)
 
-## Technology Stack
+## Need Help?
 
-- **Backend:** Python 3.11, Flask, Flask-CORS
-- **Frontend:** React 18, React Scripts
-- **Scheduling:** schedule library for automatic checks
-- **Container:** Docker with multi-stage builds
-- **Deployment:** Docker Compose, GitHub Actions for CI/CD
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+If you run into issues:
+1. Check the troubleshooting section above
+2. Make sure Docker is installed and running
+3. Check that your Discord webhook is still valid
 
 ## License
 
-MIT
+MIT License - feel free to use this for personal or commercial projects.
