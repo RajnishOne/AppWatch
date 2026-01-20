@@ -7,7 +7,7 @@ function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [showAddPage, setShowAddPage] = useState(false);
+  const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard' or 'add-app'
   const [editingApp, setEditingApp] = useState(null);
   const [message, setMessage] = useState(null);
   const [checking, setChecking] = useState({});
@@ -15,6 +15,29 @@ function App() {
 
   useEffect(() => {
     loadApps();
+    
+    // Check initial route
+    const checkRoute = () => {
+      const path = window.location.pathname;
+      if (path === '/add-app' || path.includes('/add-app')) {
+        setCurrentPage('add-app');
+      } else {
+        setCurrentPage('dashboard');
+      }
+    };
+    
+    checkRoute();
+    
+    // Handle browser back/forward buttons
+    const handlePopState = () => {
+      checkRoute();
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   const loadApps = async () => {
@@ -41,7 +64,19 @@ function App() {
 
   const handleAddApp = () => {
     setEditingApp(null);
-    setShowAddPage(true);
+    setCurrentPage('add-app');
+    window.history.pushState({ page: 'add-app' }, '', '/add-app');
+  };
+  
+  const handleCancelAddApp = () => {
+    // Navigate back in history
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      // If no history, just go to root
+      setCurrentPage('dashboard');
+      window.history.replaceState({ page: 'dashboard' }, '', '/');
+    }
   };
 
   const handleEditApp = (app) => {
@@ -141,8 +176,9 @@ function App() {
       if (response.ok) {
         showMessage(editingApp ? 'App updated successfully' : 'App added successfully');
         setShowModal(false);
-        setShowAddPage(false);
+        setCurrentPage('dashboard');
         setEditingApp(null);
+        window.history.pushState({ page: 'dashboard' }, '', '/');
         loadApps();
       } else {
         const data = await response.json();
@@ -162,11 +198,11 @@ function App() {
   }
 
   // Show add app page instead of dashboard
-  if (showAddPage) {
+  if (currentPage === 'add-app') {
     return (
       <AddAppPage
         onSave={handleSaveApp}
-        onCancel={() => setShowAddPage(false)}
+        onCancel={handleCancelAddApp}
         message={message}
         showMessage={showMessage}
       />
@@ -349,6 +385,14 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
 
   const [errors, setErrors] = useState({});
   const [selectedDestination, setSelectedDestination] = useState('');
+  
+  useEffect(() => {
+    // Update document title
+    document.title = 'Add New App - App Release Watcher';
+    return () => {
+      document.title = 'App Release Watcher';
+    };
+  }, []);
 
   const validateForm = () => {
     const newErrors = {};
@@ -449,124 +493,144 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
   };
 
   return (
-    <div className="container">
-      <div className="add-app-page">
-        <div className="page-header">
-          <h1>Add New App</h1>
-        </div>
+    <div className="add-app-page-wrapper">
+      <div className="add-app-header">
+        <button className="close-button" onClick={onCancel} aria-label="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+        <h1>Add New App</h1>
+      </div>
 
-        {message && (
-          <div className={message.type === 'error' ? 'error' : 'success'}>
-            {message.text}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="add-app-form">
-          <div className="form-group">
-            <label htmlFor="name">App Name (*)</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              placeholder="My App"
-              className={errors.name ? 'error-input' : ''}
-            />
-            {errors.name && <span className="error-text">{errors.name}</span>}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="app_store_id">App Store ID (*)</label>
-            <input
-              type="text"
-              id="app_store_id"
-              name="app_store_id"
-              value={formData.app_store_id}
-              onChange={handleChange}
-              placeholder="123456789"
-              className={errors.app_store_id ? 'error-input' : ''}
-            />
-            {errors.app_store_id && <span className="error-text">{errors.app_store_id}</span>}
-            <small>Find this in the App Store URL: apps.apple.com/app/id123456789</small>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="notification_destinations">Notification Destinations (*)</label>
-            <select
-              id="notification_destinations"
-              name="notification_destinations"
-              value={selectedDestination}
-              onChange={handleDestinationChange}
-              className={errors.notification_destinations ? 'error-input' : ''}
-            >
-              <option value="">Select a destination</option>
-              <option value="discord">Discord</option>
-            </select>
-            {errors.notification_destinations && <span className="error-text">{errors.notification_destinations}</span>}
-          </div>
-
-          {selectedDestination === 'discord' && (
-            <div className="form-group">
-              <label htmlFor="webhook_url">Discord Webhook URL (*)</label>
-              <input
-                type="url"
-                id="webhook_url"
-                name="webhook_url"
-                value={formData.webhook_url}
-                onChange={handleChange}
-                placeholder="https://discord.com/api/webhooks/..."
-                className={errors.webhook_url ? 'error-input' : ''}
-              />
-              {errors.webhook_url && <span className="error-text">{errors.webhook_url}</span>}
+      <div className="add-app-content">
+        <div className="add-app-form-section">
+          {message && (
+            <div className={`message-banner ${message.type === 'error' ? 'error' : 'success'}`}>
+              {message.text}
             </div>
           )}
 
-          <div className="form-group">
-            <label htmlFor="interval_override">Check Interval (optional)</label>
-            <input
-              type="text"
-              id="interval_override"
-              name="interval_override"
-              value={formData.interval_override}
-              onChange={handleChange}
-              placeholder="6h, 30m, 1d"
-              className={errors.interval_override ? 'error-input' : ''}
-            />
-            {errors.interval_override && <span className="error-text">{errors.interval_override}</span>}
-            <small>Override default interval (e.g., 6h, 30m, 1d). Leave empty for default.</small>
+          <div className="form-prompt">
+            <h2>Let's start with the details for your app</h2>
+            <p className="form-subtitle">Fill in the information below to start monitoring app releases</p>
           </div>
 
-          <div className="form-group">
-            <div className="checkbox-group">
+          <form onSubmit={handleSubmit} className="add-app-form">
+            <div className="form-group">
+              <label htmlFor="name">App Name (*)</label>
               <input
-                type="checkbox"
-                id="enabled"
-                name="enabled"
-                checked={formData.enabled}
+                type="text"
+                id="name"
+                name="name"
+                value={formData.name}
                 onChange={handleChange}
+                placeholder="Enter your app name"
+                className={errors.name ? 'error-input' : ''}
               />
-              <label htmlFor="enabled">Enable Monitoring</label>
+              {errors.name && <span className="error-text">{errors.name}</span>}
             </div>
-          </div>
 
-          <div className="button-group" style={{ marginTop: '30px' }}>
-            <button 
-              type="submit" 
-              className="btn btn-primary"
-              disabled={!isFormValid()}
-            >
-              Save
-            </button>
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
-              onClick={onCancel}
-            >
-              Cancel
-            </button>
+            <div className="form-group">
+              <label htmlFor="app_store_id">App Store ID (*)</label>
+              <div className="input-with-hint">
+                <input
+                  type="text"
+                  id="app_store_id"
+                  name="app_store_id"
+                  value={formData.app_store_id}
+                  onChange={handleChange}
+                  placeholder="Enter your App Store ID"
+                  className={errors.app_store_id ? 'error-input' : ''}
+                />
+                {formData.app_store_id && !errors.app_store_id && (
+                  <span className="input-hint">ID: {formData.app_store_id}</span>
+                )}
+              </div>
+              {errors.app_store_id && <span className="error-text">{errors.app_store_id}</span>}
+              <small>Find this in the App Store URL: apps.apple.com/app/id123456789</small>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="notification_destinations">Notification Destinations (*)</label>
+              <select
+                id="notification_destinations"
+                name="notification_destinations"
+                value={selectedDestination}
+                onChange={handleDestinationChange}
+                className={errors.notification_destinations ? 'error-input' : ''}
+              >
+                <option value="">Select a destination</option>
+                <option value="discord">Discord</option>
+              </select>
+              {errors.notification_destinations && <span className="error-text">{errors.notification_destinations}</span>}
+            </div>
+
+            {selectedDestination === 'discord' && (
+              <div className="form-group">
+                <label htmlFor="webhook_url">Discord Webhook URL (*)</label>
+                <input
+                  type="url"
+                  id="webhook_url"
+                  name="webhook_url"
+                  value={formData.webhook_url}
+                  onChange={handleChange}
+                  placeholder="https://discord.com/api/webhooks/..."
+                  className={errors.webhook_url ? 'error-input' : ''}
+                />
+                {errors.webhook_url && <span className="error-text">{errors.webhook_url}</span>}
+              </div>
+            )}
+
+            <div className="form-group">
+              <label htmlFor="interval_override">Check Interval (optional)</label>
+              <input
+                type="text"
+                id="interval_override"
+                name="interval_override"
+                value={formData.interval_override}
+                onChange={handleChange}
+                placeholder="6h, 30m, 1d"
+                className={errors.interval_override ? 'error-input' : ''}
+              />
+              {errors.interval_override && <span className="error-text">{errors.interval_override}</span>}
+              <small>Override default interval (e.g., 6h, 30m, 1d). Leave empty for default.</small>
+            </div>
+
+            <div className="form-group">
+              <div className="checkbox-group">
+                <input
+                  type="checkbox"
+                  id="enabled"
+                  name="enabled"
+                  checked={formData.enabled}
+                  onChange={handleChange}
+                />
+                <label htmlFor="enabled">Enable Monitoring</label>
+              </div>
+            </div>
+
+            <div className="form-actions">
+              <button 
+                type="submit" 
+                className="btn btn-primary btn-large"
+                disabled={!isFormValid()}
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div className="add-app-visual-section">
+          <div className="visual-icons">
+            <div className="visual-icon icon-1">📱</div>
+            <div className="visual-icon icon-2">🔔</div>
+            <div className="visual-icon icon-3">🚀</div>
+            <div className="visual-icon icon-4">⚡</div>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

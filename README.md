@@ -1,14 +1,16 @@
 # App Store Release Watcher
 
-Monitor iOS App Store apps for new releases and get notified in Discord. Simple web interface to manage multiple apps.
+A self-hosted tool to monitor iOS App Store apps for new releases and automatically notify you in Discord. Features a web interface for easy management of multiple apps.
 
-## What It Does
+## Features
 
-- 🍎 Monitors iOS App Store apps for new versions
-- 🔔 Sends notifications to Discord when updates are found
-- 🖥️ Easy-to-use web interface
-- 🔄 Checks for updates automatically on a schedule
+- 🍎 Monitor multiple iOS App Store apps simultaneously
+- 🔔 Automatic Discord notifications when new versions are detected
+- 📝 Formats release notes for better readability in Discord
+- 🖥️ Web-based interface for configuration and management
+- 🔄 Configurable check intervals per app
 - ⚡ Manual check and post buttons for testing
+- 🚫 Duplicate prevention - tracks last posted version
 
 ## Getting Started
 
