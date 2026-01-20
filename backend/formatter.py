@@ -119,7 +119,7 @@ class DiscordFormatter:
         parts = [f"# v{version}", ""]
         
         for section_name, items in sections.items():
-            parts.append(f"**{section_name}**")
+            parts.append(f"## {section_name}")
             
             for item in items:
                 # Ensure items start with bullet
@@ -133,46 +133,17 @@ class DiscordFormatter:
         return '\n'.join(parts).strip()
     
     def _format_generic(self, version, text):
-        """Format generic release text (Case A)"""
+        """Format generic release text (Case A) - simple bullet list"""
         lines = text.split('\n')
         parts = [f"# v{version}", ""]
         
-        # Check if it starts with "This release includes"
-        first_line = lines[0].strip() if lines else ""
-        if first_line.lower().startswith('this release includes'):
-            parts.append(f"**{first_line}**")
-            parts.append("")
-            
-            # Process remaining lines as bullets
-            for line in lines[1:]:
-                line = line.strip()
-                if line:
-                    if not line.startswith('-'):
-                        line = f"- {line}"
-                    parts.append(line)
-        else:
-            # Generic formatting - make first line bold if it looks like a header
-            if lines:
-                first_line = lines[0].strip()
-                if first_line and not first_line.startswith('-'):
-                    parts.append(f"**{first_line}**")
-                    parts.append("")
-                    
-                    # Process remaining lines
-                    for line in lines[1:]:
-                        line = line.strip()
-                        if line:
-                            if not line.startswith('-'):
-                                line = f"- {line}"
-                            parts.append(line)
-                else:
-                    # All lines are bullets
-                    for line in lines:
-                        line = line.strip()
-                        if line:
-                            if not line.startswith('-'):
-                                line = f"- {line}"
-                            parts.append(line)
+        # Convert all non-empty lines to bullets
+        for line in lines:
+            line = line.strip()
+            if line:
+                if not line.startswith('-'):
+                    line = f"- {line}"
+                parts.append(line)
         
         return '\n'.join(parts).strip()
 
