@@ -285,8 +285,8 @@ code {
 /* Add App Page - Full Page Layout */
 .add-app-page-wrapper {
   min-height: 100vh;
-  background: #1a1a1a;
-  color: #ffffff;
+  background: #f5f5f5;
+  color: #333;
   display: flex;
   flex-direction: column;
 }
@@ -294,16 +294,17 @@ code {
 .add-app-header {
   display: flex;
   align-items: center;
-  padding: 24px 32px;
-  border-bottom: 1px solid #333;
+  padding: 24px 48px;
+  border-bottom: 1px solid #ddd;
   position: sticky;
   top: 0;
-  background: #1a1a1a;
+  background: white;
   z-index: 10;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .add-app-header h1 {
-  color: #ffffff;
+  color: #333;
   font-size: 24px;
   font-weight: 500;
   margin: 0;
@@ -313,7 +314,7 @@ code {
 .close-button {
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: #666;
   cursor: pointer;
   padding: 8px;
   display: flex;
@@ -324,34 +325,39 @@ code {
 }
 
 .close-button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .close-button svg {
-  stroke: #ffffff;
+  stroke: #666;
 }
 
 .add-app-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
   flex: 1;
-  max-width: 1400px;
-  margin: 0 auto;
   width: 100%;
-  padding: 48px 32px;
-  gap: 48px;
+  padding: 0;
+  gap: 0;
+  max-width: 100%;
 }
 
 .add-app-form-section {
-  max-width: 600px;
+  padding: 48px;
+  max-width: 800px;
+  background: white;
+  margin: 48px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .form-prompt {
   margin-bottom: 40px;
+  text-align: left;
 }
 
 .form-prompt h2 {
-  color: #ffffff;
+  color: #333;
   font-size: 32px;
   font-weight: 400;
   margin: 0 0 12px 0;
@@ -359,7 +365,7 @@ code {
 }
 
 .form-subtitle {
-  color: #b0b0b0;
+  color: #666;
   font-size: 16px;
   margin: 0;
   line-height: 1.5;
@@ -371,14 +377,16 @@ code {
 
 .add-app-form .form-group {
   margin-bottom: 28px;
+  text-align: left;
 }
 
 .add-app-form .form-group label {
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
-  color: #ffffff;
+  color: #333;
   font-size: 14px;
+  text-align: left;
 }
 
 .add-app-form .form-group input,
@@ -386,11 +394,11 @@ code {
   width: 100%;
   padding: 12px 16px;
   border: none;
-  border-bottom: 2px solid #444;
+  border-bottom: 2px solid #ddd;
   border-radius: 0;
   font-size: 16px;
   background: transparent;
-  color: #ffffff;
+  color: #333;
   transition: border-color 0.2s;
 }
 
@@ -401,13 +409,13 @@ code {
 }
 
 .add-app-form .form-group input::placeholder {
-  color: #666;
+  color: #999;
 }
 
 .add-app-form .form-group select {
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   padding-right: 40px;
@@ -416,7 +424,7 @@ code {
 .add-app-form .form-group small {
   display: block;
   margin-top: 8px;
-  color: #888;
+  color: #666;
   font-size: 12px;
 }
 
@@ -429,9 +437,9 @@ code {
   right: 16px;
   top: 50%;
   transform: translateY(-50%);
-  color: #888;
+  color: #666;
   font-size: 12px;
-  background: #2a2a2a;
+  background: #f0f0f0;
   padding: 4px 8px;
   border-radius: 4px;
 }
@@ -461,7 +469,7 @@ code {
 }
 
 .checkbox-group label {
-  color: #ffffff;
+  color: #333;
   cursor: pointer;
   font-size: 14px;
   margin: 0;
@@ -471,6 +479,7 @@ code {
   margin-top: 40px;
   display: flex;
   gap: 16px;
+  justify-content: flex-start;
 }
 
 .btn-large {
@@ -484,18 +493,19 @@ code {
   border-radius: 8px;
   margin-bottom: 24px;
   font-size: 14px;
+  text-align: left;
 }
 
 .message-banner.success {
-  background: rgba(40, 167, 69, 0.1);
-  color: #28a745;
-  border: 1px solid rgba(40, 167, 69, 0.3);
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
 }
 
 .message-banner.error {
-  background: rgba(220, 53, 69, 0.1);
-  color: #dc3545;
-  border: 1px solid rgba(220, 53, 69, 0.3);
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
 }
 
 /* Visual Section */
@@ -504,7 +514,8 @@ code {
   align-items: center;
   justify-content: center;
   position: relative;
-  min-height: 400px;
+  min-height: 100vh;
+  background: #f5f5f5;
 }
 
 .visual-icons {
@@ -518,33 +529,33 @@ code {
 
 .visual-icon {
   position: absolute;
-  font-size: 64px;
+  font-size: 80px;
   opacity: 0.8;
-  filter: drop-shadow(0 4px 8px rgba(0, 123, 255, 0.3));
+  filter: drop-shadow(0 4px 12px rgba(0, 123, 255, 0.2));
   animation: float 6s ease-in-out infinite;
 }
 
 .visual-icon.icon-1 {
-  top: 10%;
+  top: 15%;
   right: 20%;
   animation-delay: 0s;
 }
 
 .visual-icon.icon-2 {
-  top: 40%;
-  right: 10%;
+  top: 35%;
+  right: 15%;
   animation-delay: 1.5s;
 }
 
 .visual-icon.icon-3 {
-  bottom: 30%;
+  bottom: 35%;
   right: 25%;
   animation-delay: 3s;
 }
 
 .visual-icon.icon-4 {
-  top: 60%;
-  right: 40%;
+  top: 55%;
+  right: 30%;
   animation-delay: 4.5s;
 }
 
@@ -558,14 +569,25 @@ code {
 }
 
 /* Responsive */
-@media (max-width: 968px) {
+@media (max-width: 1400px) {
   .add-app-content {
     grid-template-columns: 1fr;
-    padding: 32px 24px;
+  }
+  
+  .add-app-form-section {
+    margin: 48px auto;
+    max-width: 700px;
   }
   
   .add-app-visual-section {
     display: none;
+  }
+}
+
+@media (max-width: 968px) {
+  .add-app-form-section {
+    margin: 32px 24px;
+    padding: 32px 24px;
   }
   
   .form-prompt h2 {
@@ -586,7 +608,8 @@ code {
     font-size: 24px;
   }
   
-  .add-app-content {
+  .add-app-form-section {
+    margin: 24px 16px;
     padding: 24px 16px;
   }
 }
