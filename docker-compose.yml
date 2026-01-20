@@ -1,6 +1,6 @@
 services:
   watcher:
-    image: ghcr.io/rajnishone/app-release-watcher:latest
+    image: rajnishdock/app-release-watcher:latest
     container_name: app-release-watcher
     restart: unless-stopped
     ports:
