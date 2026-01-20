@@ -1,5 +1,5 @@
 services:
-  watcher:
+  app-release-watcher:
     image: rajnishdock/app-release-watcher:latest
     container_name: app-release-watcher
     restart: unless-stopped
