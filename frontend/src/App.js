@@ -294,6 +294,9 @@ function App() {
 function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) {
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const loadPreview = async () => {
     setLoadingPreview(true);
@@ -309,6 +312,24 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
       console.error('Error loading preview:', error);
     } finally {
       setLoadingPreview(false);
+    }
+  };
+
+  const loadHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/apps/${app.id}/history`);
+      if (response.ok) {
+        const data = await response.json();
+        setHistory(data);
+        setShowHistory(true);
+      } else {
+        console.error('Failed to load history');
+      }
+    } catch (error) {
+      console.error('Error loading history:', error);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -382,6 +403,13 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
           {loadingPreview ? 'Loading...' : 'Preview'}
         </button>
         <button
+          className="btn btn-secondary"
+          onClick={loadHistory}
+          disabled={loadingHistory}
+        >
+          {loadingHistory ? 'Loading...' : '📜 History'}
+        </button>
+        <button
           className="btn btn-primary"
           onClick={() => onEdit(app)}
           disabled={checking || posting}
@@ -396,6 +424,14 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
           Delete
         </button>
       </div>
+
+      {showHistory && (
+        <HistoryModal
+          app={app}
+          history={history}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
     </div>
   );
 }
@@ -505,6 +541,70 @@ function AppModal({ app, onClose, onSave }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function HistoryModal({ app, history, onClose }) {
+  // Simple formatter for history display
+  const formatReleaseNotes = (version, releaseNotes) => {
+    if (!releaseNotes) {
+      return `# v${version}\n\nNo release notes available.`;
+    }
+    
+    // Simple formatting - just add version header
+    return `# v${version}\n\n${releaseNotes}`;
+  };
+
+  return (
+    <div className="modal" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '80vh' }}>
+        <div className="modal-header">
+          <h2>Version History - {app.name}</h2>
+        </div>
+
+        <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          {history.length === 0 ? (
+            <div className="empty-state" style={{ padding: '20px' }}>
+              <p>No version history yet. History will be populated as versions are checked.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {history.map((entry, index) => (
+                <div key={index} style={{ 
+                  border: '1px solid #dee2e6', 
+                  borderRadius: '4px', 
+                  padding: '15px',
+                  background: index === 0 ? '#f8f9fa' : 'white'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h3 style={{ margin: 0, color: '#007bff' }}>v{entry.version}</h3>
+                    <span style={{ fontSize: '12px', color: '#666' }}>
+                      {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'Unknown date'}
+                    </span>
+                  </div>
+                  {entry.release_notes && (
+                    <div className="preview-box" style={{ 
+                      marginTop: '10px',
+                      background: 'white',
+                      maxHeight: '200px',
+                      overflowY: 'auto'
+                    }}>
+                      {formatReleaseNotes(entry.version, entry.release_notes)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="button-group" style={{ marginTop: '20px' }}>
+          <button className="btn btn-secondary" onClick={onClose}>
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );

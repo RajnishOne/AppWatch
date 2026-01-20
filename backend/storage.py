@@ -133,6 +133,11 @@ class StorageManager:
         if check_file.exists():
             check_file.unlink()
         
+        # Delete history file
+        history_file = self._get_history_file(app_id)
+        if history_file.exists():
+            history_file.unlink()
+        
         return True
     
     def _get_version_file(self, app_id):
@@ -152,6 +157,12 @@ class StorageManager:
         app_dir = self.data_dir / 'apps' / app_id
         app_dir.mkdir(parents=True, exist_ok=True)
         return app_dir / 'current_version.txt'
+    
+    def _get_history_file(self, app_id):
+        """Get path to version history file"""
+        app_dir = self.data_dir / 'apps' / app_id
+        app_dir.mkdir(parents=True, exist_ok=True)
+        return app_dir / 'history.json'
     
     def get_last_version(self, app_id):
         """Get last posted version for an app"""
@@ -220,4 +231,57 @@ class StorageManager:
         except Exception as e:
             logger.error(f"Error saving current version: {e}")
             raise
+    
+    def add_to_history(self, app_id, version, release_notes, timestamp=None):
+        """Add a version entry to history"""
+        if timestamp is None:
+            from datetime import datetime
+            timestamp = datetime.now().isoformat()
+        
+        history_file = self._get_history_file(app_id)
+        
+        try:
+            # Load existing history
+            if history_file.exists():
+                with open(history_file, 'r') as f:
+                    history = json.load(f)
+            else:
+                history = []
+            
+            # Check if version already exists
+            existing = next((h for h in history if h.get('version') == version), None)
+            if existing:
+                # Update existing entry
+                existing['release_notes'] = release_notes
+                existing['timestamp'] = timestamp
+            else:
+                # Add new entry at the beginning (newest first)
+                history.insert(0, {
+                    'version': version,
+                    'release_notes': release_notes,
+                    'timestamp': timestamp
+                })
+            
+            # Keep only last 50 entries to prevent file from growing too large
+            history = history[:50]
+            
+            # Save history
+            with open(history_file, 'w') as f:
+                json.dump(history, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving to history: {e}")
+            raise
+    
+    def get_history(self, app_id):
+        """Get version history for an app"""
+        history_file = self._get_history_file(app_id)
+        
+        try:
+            if history_file.exists():
+                with open(history_file, 'r') as f:
+                    return json.load(f)
+            return []
+        except Exception as e:
+            logger.error(f"Error reading history: {e}")
+            return []
 

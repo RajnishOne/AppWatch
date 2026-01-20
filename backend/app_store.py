@@ -84,6 +84,12 @@ class AppStoreMonitor:
             self.storage.update_last_check(app_id, datetime.now().isoformat())
             self.storage.save_current_version(app_id, current_version)
             
+            # Add current version to history (even if not new, for tracking)
+            # Only add if it's not already in history to avoid duplicates
+            history = self.storage.get_history(app_id)
+            if not any(h.get('version') == current_version for h in history):
+                self.storage.add_to_history(app_id, current_version, release_notes, datetime.now().isoformat())
+            
             # Check if version changed
             if last_version and current_version == last_version:
                 return {
@@ -97,6 +103,9 @@ class AppStoreMonitor:
             
             # New version detected - post to Discord
             formatted_notes = self.formatter.format_release_notes(current_version, release_notes)
+            
+            # Add to history
+            self.storage.add_to_history(app_id, current_version, release_notes, datetime.now().isoformat())
             
             # Post to Discord
             success = self._post_to_discord_webhook(webhook_url, formatted_notes)

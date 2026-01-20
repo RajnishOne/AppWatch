@@ -353,6 +353,21 @@ def post_app_endpoint(app_id):
     return jsonify(result), status_code
 
 
+@app.route('/api/apps/<app_id>/history', methods=['GET'])
+def get_app_history(app_id):
+    """Get version history for an app"""
+    try:
+        app = storage.get_app(app_id)
+        if not app:
+            return jsonify({'error': 'App not found'}), 404
+        
+        history = storage.get_history(app_id)
+        return jsonify(history), 200
+    except Exception as e:
+        logger.error(f"Error getting history for app {app_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
     """Get recent logs (simplified - in production use proper log aggregation)"""
