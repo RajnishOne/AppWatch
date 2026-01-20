@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './index.css';
 
 const API_BASE = window.location.origin;
@@ -12,11 +12,12 @@ function App() {
   const [checking, setChecking] = useState({});
   const [posting, setPosting] = useState({});
 
-  useEffect(() => {
-    loadApps();
+  const showMessage = useCallback((text, type = 'success') => {
+    setMessage({ text, type });
+    setTimeout(() => setMessage(null), 5000);
   }, []);
 
-  const loadApps = async () => {
+  const loadApps = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE}/api/apps`);
@@ -31,12 +32,11 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showMessage]);
 
-  const showMessage = (text, type = 'success') => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage(null), 5000);
-  };
+  useEffect(() => {
+    loadApps();
+  }, [loadApps]);
 
   const handleAddApp = () => {
     setEditingApp(null);
