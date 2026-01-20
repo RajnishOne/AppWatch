@@ -13,6 +13,8 @@ RUN npm install
 COPY frontend/ ./
 
 # Build frontend
+ENV CI=true
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 # Final stage: Python backend
