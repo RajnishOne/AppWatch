@@ -24,7 +24,7 @@ Create a file named `docker-compose.yml` in a folder on your computer. Copy and 
 
 ```yaml
 services:
-  watcher:
+  app-release-watcher:
     image: rajnishdock/app-release-watcher:latest
     container_name: app-release-watcher
     restart: unless-stopped
@@ -246,7 +246,7 @@ You can customize the application behavior using environment variables in your `
 
 ```yaml
 services:
-  watcher:
+  app-release-watcher:
     image: rajnishdock/app-release-watcher:latest
     container_name: app-release-watcher
     restart: unless-stopped
