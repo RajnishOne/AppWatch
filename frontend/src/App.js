@@ -7,6 +7,7 @@ function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showAddPage, setShowAddPage] = useState(false);
   const [editingApp, setEditingApp] = useState(null);
   const [message, setMessage] = useState(null);
   const [checking, setChecking] = useState({});
@@ -40,7 +41,7 @@ function App() {
 
   const handleAddApp = () => {
     setEditingApp(null);
-    setShowModal(true);
+    setShowAddPage(true);
   };
 
   const handleEditApp = (app) => {
@@ -140,6 +141,7 @@ function App() {
       if (response.ok) {
         showMessage(editingApp ? 'App updated successfully' : 'App added successfully');
         setShowModal(false);
+        setShowAddPage(false);
         setEditingApp(null);
         loadApps();
       } else {
@@ -156,6 +158,18 @@ function App() {
       <div className="container">
         <div className="loading">Loading...</div>
       </div>
+    );
+  }
+
+  // Show add app page instead of dashboard
+  if (showAddPage) {
+    return (
+      <AddAppPage
+        onSave={handleSaveApp}
+        onCancel={() => setShowAddPage(false)}
+        message={message}
+        showMessage={showMessage}
+      />
     );
   }
 
@@ -318,6 +332,241 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
         >
           Delete
         </button>
+      </div>
+    </div>
+  );
+}
+
+function AddAppPage({ onSave, onCancel, message, showMessage }) {
+  const [formData, setFormData] = useState({
+    name: '',
+    app_store_id: '',
+    notification_destinations: [],
+    webhook_url: '',
+    interval_override: '',
+    enabled: true
+  });
+
+  const [errors, setErrors] = useState({});
+  const [selectedDestination, setSelectedDestination] = useState('');
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.name.trim()) {
+      newErrors.name = 'App Name is required';
+    }
+    
+    if (!formData.app_store_id.trim()) {
+      newErrors.app_store_id = 'App Store ID is required';
+    } else if (!/^\d+$/.test(formData.app_store_id.trim())) {
+      newErrors.app_store_id = 'App Store ID must be a number';
+    }
+    
+    if (!selectedDestination) {
+      newErrors.notification_destinations = 'Please select a notification destination';
+    }
+    
+    if (selectedDestination === 'discord' && !formData.webhook_url.trim()) {
+      newErrors.webhook_url = 'Discord Webhook URL is required';
+    } else if (selectedDestination === 'discord' && formData.webhook_url.trim() && 
+               !formData.webhook_url.trim().startsWith('https://discord.com/api/webhooks/')) {
+      newErrors.webhook_url = 'Invalid Discord webhook URL';
+    }
+    
+    if (formData.interval_override.trim()) {
+      // Validate interval format
+      const intervalRegex = /^\d+[hmsd]$/i;
+      if (!intervalRegex.test(formData.interval_override.trim())) {
+        newErrors.interval_override = 'Invalid interval format. Use format like: 6h, 30m, 1d';
+      }
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const isFormValid = () => {
+    return formData.name.trim() &&
+           formData.app_store_id.trim() &&
+           /^\d+$/.test(formData.app_store_id.trim()) &&
+           selectedDestination &&
+           (selectedDestination !== 'discord' || (formData.webhook_url.trim() && 
+            formData.webhook_url.trim().startsWith('https://discord.com/api/webhooks/'))) &&
+           (!formData.interval_override.trim() || /^\d+[hmsd]$/i.test(formData.interval_override.trim()));
+  };
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+    
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  const handleDestinationChange = (e) => {
+    const value = e.target.value;
+    setSelectedDestination(value);
+    setFormData(prev => ({
+      ...prev,
+      notification_destinations: value ? [value] : [],
+      webhook_url: value !== 'discord' ? '' : prev.webhook_url
+    }));
+    
+    // Clear errors
+    if (errors.notification_destinations) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.notification_destinations;
+        return newErrors;
+      });
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      showMessage('Please fill in all required fields correctly', 'error');
+      return;
+    }
+
+    const submitData = {
+      ...formData,
+      notification_destinations: selectedDestination ? [selectedDestination] : []
+    };
+    
+    await onSave(submitData);
+  };
+
+  return (
+    <div className="container">
+      <div className="add-app-page">
+        <div className="page-header">
+          <h1>Add New App</h1>
+        </div>
+
+        {message && (
+          <div className={message.type === 'error' ? 'error' : 'success'}>
+            {message.text}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="add-app-form">
+          <div className="form-group">
+            <label htmlFor="name">App Name (*)</label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="My App"
+              className={errors.name ? 'error-input' : ''}
+            />
+            {errors.name && <span className="error-text">{errors.name}</span>}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="app_store_id">App Store ID (*)</label>
+            <input
+              type="text"
+              id="app_store_id"
+              name="app_store_id"
+              value={formData.app_store_id}
+              onChange={handleChange}
+              placeholder="123456789"
+              className={errors.app_store_id ? 'error-input' : ''}
+            />
+            {errors.app_store_id && <span className="error-text">{errors.app_store_id}</span>}
+            <small>Find this in the App Store URL: apps.apple.com/app/id123456789</small>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="notification_destinations">Notification Destinations (*)</label>
+            <select
+              id="notification_destinations"
+              name="notification_destinations"
+              value={selectedDestination}
+              onChange={handleDestinationChange}
+              className={errors.notification_destinations ? 'error-input' : ''}
+            >
+              <option value="">Select a destination</option>
+              <option value="discord">Discord</option>
+            </select>
+            {errors.notification_destinations && <span className="error-text">{errors.notification_destinations}</span>}
+          </div>
+
+          {selectedDestination === 'discord' && (
+            <div className="form-group">
+              <label htmlFor="webhook_url">Discord Webhook URL (*)</label>
+              <input
+                type="url"
+                id="webhook_url"
+                name="webhook_url"
+                value={formData.webhook_url}
+                onChange={handleChange}
+                placeholder="https://discord.com/api/webhooks/..."
+                className={errors.webhook_url ? 'error-input' : ''}
+              />
+              {errors.webhook_url && <span className="error-text">{errors.webhook_url}</span>}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label htmlFor="interval_override">Check Interval (optional)</label>
+            <input
+              type="text"
+              id="interval_override"
+              name="interval_override"
+              value={formData.interval_override}
+              onChange={handleChange}
+              placeholder="6h, 30m, 1d"
+              className={errors.interval_override ? 'error-input' : ''}
+            />
+            {errors.interval_override && <span className="error-text">{errors.interval_override}</span>}
+            <small>Override default interval (e.g., 6h, 30m, 1d). Leave empty for default.</small>
+          </div>
+
+          <div className="form-group">
+            <div className="checkbox-group">
+              <input
+                type="checkbox"
+                id="enabled"
+                name="enabled"
+                checked={formData.enabled}
+                onChange={handleChange}
+              />
+              <label htmlFor="enabled">Enable Monitoring</label>
+            </div>
+          </div>
+
+          <div className="button-group" style={{ marginTop: '30px' }}>
+            <button 
+              type="submit" 
+              className="btn btn-primary"
+              disabled={!isFormValid()}
+            >
+              Save
+            </button>
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
