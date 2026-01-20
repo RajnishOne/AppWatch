@@ -101,7 +101,7 @@ function App() {
       const text = await file.text();
       const data = JSON.parse(text);
 
-      if (!confirm(`Import ${data.apps?.length || 0} app(s)? This will add them to your existing apps.`)) {
+      if (!window.confirm(`Import ${data.apps?.length || 0} app(s)? This will add them to your existing apps.`)) {
         return;
       }
 
