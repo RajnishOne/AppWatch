@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   watcher:
-    build:
-      context: https://github.com/RajnishOne/AppReleaseWatcher.git#main
-      dockerfile: Dockerfile
+    image: ghcr.io/rajnishone/app-release-watcher:latest
     container_name: app-release-watcher
     restart: unless-stopped
     ports:
