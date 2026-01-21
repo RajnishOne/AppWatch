@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './index.css';
 
 const API_BASE = window.location.origin;
@@ -27,6 +27,10 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('auth_token') || null);
+  
+  // Ref to track if apps have been loaded to prevent duplicate calls
+  const appsLoadedRef = useRef(false);
+  const loadingAppsRef = useRef(false); // Track if currently loading to prevent concurrent calls
 
   // Check authentication status on mount - only once
   useEffect(() => {
@@ -96,7 +100,7 @@ function App() {
         setAuthToken(tokenToVerify);
         if (authLoading) {
           setAuthLoading(false);
-          loadApps();
+          // Don't call loadApps here - let useEffect handle it
         }
       } else if (response.status === 401) {
         // Token invalid, clear it
@@ -128,7 +132,8 @@ function App() {
         setAuthToken(data.token);
         setIsAuthenticated(true);
         setAuthLoading(false);
-        loadApps();
+        appsLoadedRef.current = false; // Reset flag so useEffect can load apps
+        // Don't call loadApps here - let useEffect handle it
         return { success: true };
       } else {
         const errorData = await response.json();
@@ -182,7 +187,8 @@ function App() {
       return;
     }
     
-    if (isAuthenticated) {
+    // Load apps only once when authenticated and not already loading
+    if (isAuthenticated && !appsLoadedRef.current && !loadingAppsRef.current) {
       loadApps();
     }
     
@@ -239,10 +245,17 @@ function App() {
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authLoading]); // Only re-run if auth state changes
 
   const loadApps = async () => {
+    // Prevent duplicate concurrent calls
+    if (loadingAppsRef.current) {
+      return;
+    }
+    
     try {
+      loadingAppsRef.current = true;
       setLoading(true);
       const token = authToken || localStorage.getItem('auth_token');
       const headers = getAuthHeaders();
@@ -251,6 +264,7 @@ function App() {
       if (response.ok) {
         const data = await response.json();
         setApps(data);
+        appsLoadedRef.current = true; // Mark as loaded
         // Ensure we're marked as authenticated if we got data
         if (!isAuthenticated && token) {
           setIsAuthenticated(true);
@@ -260,6 +274,7 @@ function App() {
         localStorage.removeItem('auth_token');
         setAuthToken(null);
         setIsAuthenticated(false);
+        appsLoadedRef.current = false; // Reset flag
         setAuthStatus(prev => prev ? { ...prev, enabled: true } : null);
       } else {
         showMessage('Failed to load apps', 'error');
@@ -268,6 +283,7 @@ function App() {
       showMessage('Error loading apps: ' + error.message, 'error');
     } finally {
       setLoading(false);
+      loadingAppsRef.current = false;
     }
   };
 
@@ -329,6 +345,7 @@ function App() {
 
       if (response.ok) {
         showMessage('App deleted successfully');
+        appsLoadedRef.current = false; // Reset flag to allow reload
         loadApps();
       } else {
         showMessage('Failed to delete app', 'error');
@@ -359,6 +376,7 @@ function App() {
         } else {
           showMessage(data.error || 'Check failed', 'error');
         }
+        appsLoadedRef.current = false; // Reset flag to allow reload
         loadApps();
       } else {
         showMessage(data.error || 'Check failed', 'error');
@@ -391,6 +409,7 @@ function App() {
         } else {
           showMessage(data.error || 'Post failed', 'error');
         }
+        appsLoadedRef.current = false; // Reset flag to allow reload
         loadApps();
       } else {
         showMessage(data.error || 'Post failed', 'error');
@@ -429,6 +448,7 @@ function App() {
         setCurrentPage('dashboard');
         setEditingApp(null);
         window.history.pushState({ page: 'dashboard' }, '', '/');
+        appsLoadedRef.current = false; // Reset flag to allow reload
         loadApps();
       } else {
         const data = await response.json();
