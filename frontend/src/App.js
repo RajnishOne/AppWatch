@@ -448,10 +448,14 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
                 return '✓ 1 Discord webhook (legacy)';
               }
               
-              // Count valid destinations (with webhook URLs)
+              // Count valid destinations by type
               const validDestinations = destinations.filter(d => {
-                if (d.type === 'discord') {
+                if (['discord', 'slack', 'teams', 'generic'].includes(d.type)) {
                   return d.webhook_url && d.webhook_url.trim();
+                } else if (d.type === 'telegram') {
+                  return (d.bot_token && d.bot_token.trim()) && (d.chat_id && d.chat_id.trim());
+                } else if (d.type === 'email') {
+                  return d.email && d.email.trim() && (d.smtp_host && d.smtp_host.trim());
                 }
                 return false;
               });
@@ -460,11 +464,20 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
                 return '✗ Not configured';
               }
               
-              const discordCount = validDestinations.filter(d => d.type === 'discord').length;
+              // Count by type
+              const counts = {};
+              validDestinations.forEach(d => {
+                counts[d.type] = (counts[d.type] || 0) + 1;
+              });
+              
               const parts = [];
-              if (discordCount > 0) {
-                parts.push(`${discordCount} Discord${discordCount > 1 ? ' webhooks' : ' webhook'}`);
-              }
+              if (counts.discord) parts.push(`${counts.discord} Discord${counts.discord > 1 ? ' webhooks' : ' webhook'}`);
+              if (counts.slack) parts.push(`${counts.slack} Slack${counts.slack > 1 ? ' webhooks' : ' webhook'}`);
+              if (counts.telegram) parts.push(`${counts.telegram} Telegram${counts.telegram > 1 ? ' bots' : ' bot'}`);
+              if (counts.teams) parts.push(`${counts.teams} Teams${counts.teams > 1 ? ' webhooks' : ' webhook'}`);
+              if (counts.email) parts.push(`${counts.email} Email${counts.email > 1 ? ' addresses' : ' address'}`);
+              if (counts.generic) parts.push(`${counts.generic} Generic${counts.generic > 1 ? ' webhooks' : ' webhook'}`);
+              
               return parts.length > 0 ? `✓ ${parts.join(', ')}` : '✗ Not configured';
             })()}
           </span>
@@ -523,19 +536,41 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
   );
 }
 
+// Helper function to get webhook type instructions
+const getWebhookInstructions = (type) => {
+  const instructions = {
+    discord: 'Go to Discord Server Settings → Integrations → Webhooks → New Webhook. Copy the webhook URL.',
+    slack: 'Go to Slack App Settings → Incoming Webhooks → Add New Webhook. Copy the webhook URL (starts with https://hooks.slack.com/).',
+    telegram: '1. Message @BotFather on Telegram to create a bot and get a bot token. 2. Get your chat ID by messaging @userinfobot. 3. Enter bot token (or set in Settings) and chat ID.',
+    teams: 'Go to Microsoft Teams → Channel → Connectors → Incoming Webhook → Configure. Copy the webhook URL.',
+    email: 'Enter recipient email address. SMTP settings can be configured in Settings or per destination.',
+    generic: 'Enter any HTTP/HTTPS webhook URL. Optionally customize the JSON payload template.'
+  };
+  return instructions[type] || '';
+};
+
 function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
   // Initialize destinations from editingApp if provided
   const initializeDestinations = () => {
     if (editingApp?.notification_destinations && editingApp.notification_destinations.length > 0) {
       return editingApp.notification_destinations.map(dest => ({
-        type: dest.type || 'discord',
-        webhook_url: dest.webhook_url || ''
+        type: dest.type || '',
+        webhook_url: dest.webhook_url || '',
+        bot_token: dest.bot_token || '',
+        chat_id: dest.chat_id || '',
+        email: dest.email || '',
+        smtp_host: dest.smtp_host || '',
+        smtp_port: dest.smtp_port || '',
+        smtp_user: dest.smtp_user || '',
+        smtp_password: dest.smtp_password || '',
+        smtp_from: dest.smtp_from || '',
+        payload_template: dest.payload_template || ''
       }));
     } else if (editingApp?.webhook_url) {
       // Legacy support - convert old webhook_url to new format
       return [{ type: 'discord', webhook_url: editingApp.webhook_url }];
     }
-    return [{ type: '', webhook_url: '' }];
+    return [{ type: '', webhook_url: '', bot_token: '', chat_id: '', email: '', smtp_host: '', smtp_port: '', smtp_user: '', smtp_password: '', smtp_from: '', payload_template: '' }];
   };
 
   const [formData, setFormData] = useState({
@@ -666,11 +701,41 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
     // Validate notification destinations
     destinations.forEach((dest, index) => {
       if (dest.type) {
-        if (dest.type === 'discord' && !dest.webhook_url.trim()) {
-          newErrors[`webhook_${index}`] = 'Discord Webhook URL is required when Discord is selected';
-        } else if (dest.type === 'discord' && dest.webhook_url.trim() && 
-                   !dest.webhook_url.trim().startsWith('https://discord.com/api/webhooks/')) {
-          newErrors[`webhook_${index}`] = 'Invalid Discord webhook URL';
+        if (['discord', 'slack', 'teams', 'generic'].includes(dest.type)) {
+          if (!dest.webhook_url || !dest.webhook_url.trim()) {
+            newErrors[`dest_${index}_webhook_url`] = `${dest.type.charAt(0).toUpperCase() + dest.type.slice(1)} webhook URL is required`;
+          } else if (dest.type === 'discord' && !dest.webhook_url.trim().startsWith('https://discord.com/api/webhooks/')) {
+            newErrors[`dest_${index}_webhook_url`] = 'Invalid Discord webhook URL';
+          } else if (dest.type === 'slack' && !dest.webhook_url.trim().startsWith('https://hooks.slack.com/')) {
+            newErrors[`dest_${index}_webhook_url`] = 'Invalid Slack webhook URL';
+          } else if (dest.type === 'generic' && !dest.webhook_url.trim().startsWith('http://') && !dest.webhook_url.trim().startsWith('https://')) {
+            newErrors[`dest_${index}_webhook_url`] = 'Invalid webhook URL (must start with http:// or https://)';
+          }
+          
+          // Validate payload_template for generic webhooks
+          if (dest.type === 'generic' && dest.payload_template && dest.payload_template.trim()) {
+            try {
+              JSON.parse(dest.payload_template);
+            } catch (e) {
+              newErrors[`dest_${index}_payload_template`] = 'Invalid JSON in payload template';
+            }
+          }
+        } else if (dest.type === 'telegram') {
+          if (!dest.bot_token || !dest.bot_token.trim()) {
+            newErrors[`dest_${index}_bot_token`] = 'Telegram bot token is required (or set in Settings)';
+          }
+          if (!dest.chat_id || !dest.chat_id.trim()) {
+            newErrors[`dest_${index}_chat_id`] = 'Telegram chat ID is required';
+          }
+        } else if (dest.type === 'email') {
+          if (!dest.email || !dest.email.trim()) {
+            newErrors[`dest_${index}_email`] = 'Email address is required';
+          } else if (!dest.email.includes('@') || !dest.email.split('@')[1] || !dest.email.split('@')[1].includes('.')) {
+            newErrors[`dest_${index}_email`] = 'Invalid email address format';
+          }
+          if (!dest.smtp_host || !dest.smtp_host.trim()) {
+            newErrors[`dest_${index}_smtp_host`] = 'SMTP host is required (or set in Settings)';
+          }
         }
       }
     });
@@ -698,11 +763,23 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
       return false;
     }
     
-    // Validate destinations - if a type is selected, webhook must be valid
+    // Validate destinations - if a type is selected, required fields must be valid
     for (const dest of destinations) {
-      if (dest.type === 'discord') {
-        if (!dest.webhook_url.trim() || !dest.webhook_url.trim().startsWith('https://discord.com/api/webhooks/')) {
-          return false;
+      if (dest.type) {
+        if (['discord', 'slack', 'teams', 'generic'].includes(dest.type)) {
+          if (!dest.webhook_url || !dest.webhook_url.trim()) return false;
+          if (dest.type === 'discord' && !dest.webhook_url.trim().startsWith('https://discord.com/api/webhooks/')) return false;
+          if (dest.type === 'slack' && !dest.webhook_url.trim().startsWith('https://hooks.slack.com/')) return false;
+          if (dest.type === 'generic' && !dest.webhook_url.trim().startsWith('http://') && !dest.webhook_url.trim().startsWith('https://')) return false;
+          if (dest.type === 'generic' && dest.payload_template && dest.payload_template.trim()) {
+            try { JSON.parse(dest.payload_template); } catch { return false; }
+          }
+        } else if (dest.type === 'telegram') {
+          if (!dest.bot_token || !dest.bot_token.trim()) return false;
+          if (!dest.chat_id || !dest.chat_id.trim()) return false;
+        } else if (dest.type === 'email') {
+          if (!dest.email || !dest.email.trim() || !dest.email.includes('@')) return false;
+          if (!dest.smtp_host || !dest.smtp_host.trim()) return false;
         }
       }
     }
@@ -730,11 +807,25 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
   const handleDestinationTypeChange = (index, value) => {
     setDestinations(prev => {
       const newDests = [...prev];
-      newDests[index] = { type: value, webhook_url: value === 'discord' ? newDests[index].webhook_url : '' };
+      // Preserve existing values when changing type
+      const existing = newDests[index] || {};
+      newDests[index] = { 
+        type: value, 
+        webhook_url: existing.webhook_url || '',
+        bot_token: existing.bot_token || '',
+        chat_id: existing.chat_id || '',
+        email: existing.email || '',
+        smtp_host: existing.smtp_host || '',
+        smtp_port: existing.smtp_port || '',
+        smtp_user: existing.smtp_user || '',
+        smtp_password: existing.smtp_password || '',
+        smtp_from: existing.smtp_from || '',
+        payload_template: existing.payload_template || ''
+      };
       
       // If a destination is selected and it's not the last one, add a new empty destination
       if (value && index === newDests.length - 1) {
-        newDests.push({ type: '', webhook_url: '' });
+        newDests.push({ type: '', webhook_url: '', bot_token: '', chat_id: '', email: '', smtp_host: '', smtp_port: '', smtp_user: '', smtp_password: '', smtp_from: '', payload_template: '' });
       }
       
       // Remove empty destinations at the end (except the last one)
@@ -746,27 +837,30 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
     });
     
     // Clear errors
-    if (errors[`webhook_${index}`]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[`webhook_${index}`];
-        return newErrors;
-      });
-    }
+    Object.keys(errors).forEach(key => {
+      if (key.startsWith(`dest_${index}_`)) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors[key];
+          return newErrors;
+        });
+      }
+    });
   };
 
-  const handleWebhookChange = (index, value) => {
+  const handleDestinationFieldChange = (index, field, value) => {
     setDestinations(prev => {
       const newDests = [...prev];
-      newDests[index] = { ...newDests[index], webhook_url: value };
+      newDests[index] = { ...newDests[index], [field]: value };
       return newDests;
     });
     
     // Clear error when user starts typing
-    if (errors[`webhook_${index}`]) {
+    const errorKey = `dest_${index}_${field}`;
+    if (errors[errorKey]) {
       setErrors(prev => {
         const newErrors = { ...prev };
-        delete newErrors[`webhook_${index}`];
+        delete newErrors[errorKey];
         return newErrors;
       });
     }
@@ -783,10 +877,29 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
     // Build notification destinations array - only include destinations with a type
     const notificationDestinations = destinations
       .filter(dest => dest.type)
-      .map(dest => ({
-        type: dest.type,
-        webhook_url: dest.webhook_url.trim()
-      }));
+      .map(dest => {
+        const result = { type: dest.type };
+        
+        // Add fields based on type
+        if (['discord', 'slack', 'teams', 'generic'].includes(dest.type)) {
+          if (dest.webhook_url) result.webhook_url = dest.webhook_url.trim();
+          if (dest.type === 'generic' && dest.payload_template) {
+            result.payload_template = dest.payload_template.trim();
+          }
+        } else if (dest.type === 'telegram') {
+          if (dest.bot_token) result.bot_token = dest.bot_token.trim();
+          if (dest.chat_id) result.chat_id = dest.chat_id.trim();
+        } else if (dest.type === 'email') {
+          if (dest.email) result.email = dest.email.trim();
+          if (dest.smtp_host) result.smtp_host = dest.smtp_host.trim();
+          if (dest.smtp_port) result.smtp_port = dest.smtp_port.trim();
+          if (dest.smtp_user) result.smtp_user = dest.smtp_user.trim();
+          if (dest.smtp_password) result.smtp_password = dest.smtp_password.trim();
+          if (dest.smtp_from) result.smtp_from = dest.smtp_from.trim();
+        }
+        
+        return result;
+      });
 
     const submitData = {
       ...formData,
@@ -891,25 +1004,237 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
                     >
                       <option value="">Select a destination (optional)</option>
                       <option value="discord">Discord</option>
+                      <option value="slack">Slack</option>
+                      <option value="telegram">Telegram</option>
+                      <option value="teams">Microsoft Teams</option>
+                      <option value="email">Email (SMTP)</option>
+                      <option value="generic">Generic Webhook</option>
                     </select>
+                    {dest.type && (
+                      <small style={{ display: 'block', marginTop: '5px', color: '#666', fontStyle: 'italic' }}>
+                        {getWebhookInstructions(dest.type)}
+                      </small>
+                    )}
                   </div>
                   
                   {dest.type === 'discord' && (
                     <div>
-                      <label htmlFor={`webhook_url_${index}`}>Discord Webhook URL</label>
+                      <label htmlFor={`webhook_url_${index}`}>Discord Webhook URL *</label>
                       <input
                         type="url"
                         id={`webhook_url_${index}`}
-                        value={dest.webhook_url}
-                        onChange={(e) => handleWebhookChange(index, e.target.value)}
+                        value={dest.webhook_url || ''}
+                        onChange={(e) => handleDestinationFieldChange(index, 'webhook_url', e.target.value)}
                         placeholder="https://discord.com/api/webhooks/..."
-                        className={errors[`webhook_${index}`] ? 'error-input' : ''}
+                        className={errors[`dest_${index}_webhook_url`] ? 'error-input' : ''}
                         style={{ width: '100%', padding: '8px', marginTop: '5px' }}
                       />
-                      {errors[`webhook_${index}`] && (
-                        <span className="error-text">{errors[`webhook_${index}`]}</span>
+                      {errors[`dest_${index}_webhook_url`] && (
+                        <span className="error-text">{errors[`dest_${index}_webhook_url`]}</span>
                       )}
                     </div>
+                  )}
+                  
+                  {dest.type === 'slack' && (
+                    <div>
+                      <label htmlFor={`webhook_url_${index}`}>Slack Webhook URL *</label>
+                      <input
+                        type="url"
+                        id={`webhook_url_${index}`}
+                        value={dest.webhook_url || ''}
+                        onChange={(e) => handleDestinationFieldChange(index, 'webhook_url', e.target.value)}
+                        placeholder="https://hooks.slack.com/services/..."
+                        className={errors[`dest_${index}_webhook_url`] ? 'error-input' : ''}
+                        style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                      />
+                      {errors[`dest_${index}_webhook_url`] && (
+                        <span className="error-text">{errors[`dest_${index}_webhook_url`]}</span>
+                      )}
+                    </div>
+                  )}
+                  
+                  {dest.type === 'telegram' && (
+                    <>
+                      <div style={{ marginBottom: '10px' }}>
+                        <label htmlFor={`bot_token_${index}`}>Bot Token *</label>
+                        <input
+                          type="text"
+                          id={`bot_token_${index}`}
+                          value={dest.bot_token || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'bot_token', e.target.value)}
+                          placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                          className={errors[`dest_${index}_bot_token`] ? 'error-input' : ''}
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                        <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                          Get from @BotFather on Telegram. Can also be set in Settings for all apps.
+                        </small>
+                        {errors[`dest_${index}_bot_token`] && (
+                          <span className="error-text">{errors[`dest_${index}_bot_token`]}</span>
+                        )}
+                      </div>
+                      <div>
+                        <label htmlFor={`chat_id_${index}`}>Chat ID *</label>
+                        <input
+                          type="text"
+                          id={`chat_id_${index}`}
+                          value={dest.chat_id || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'chat_id', e.target.value)}
+                          placeholder="123456789"
+                          className={errors[`dest_${index}_chat_id`] ? 'error-input' : ''}
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                        <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                          Get from @userinfobot on Telegram or from message updates.
+                        </small>
+                        {errors[`dest_${index}_chat_id`] && (
+                          <span className="error-text">{errors[`dest_${index}_chat_id`]}</span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  
+                  {dest.type === 'teams' && (
+                    <div>
+                      <label htmlFor={`webhook_url_${index}`}>Microsoft Teams Webhook URL *</label>
+                      <input
+                        type="url"
+                        id={`webhook_url_${index}`}
+                        value={dest.webhook_url || ''}
+                        onChange={(e) => handleDestinationFieldChange(index, 'webhook_url', e.target.value)}
+                        placeholder="https://outlook.office.com/webhook/..."
+                        className={errors[`dest_${index}_webhook_url`] ? 'error-input' : ''}
+                        style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                      />
+                      {errors[`dest_${index}_webhook_url`] && (
+                        <span className="error-text">{errors[`dest_${index}_webhook_url`]}</span>
+                      )}
+                    </div>
+                  )}
+                  
+                  {dest.type === 'email' && (
+                    <>
+                      <div style={{ marginBottom: '10px' }}>
+                        <label htmlFor={`email_${index}`}>Email Address *</label>
+                        <input
+                          type="email"
+                          id={`email_${index}`}
+                          value={dest.email || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'email', e.target.value)}
+                          placeholder="recipient@example.com"
+                          className={errors[`dest_${index}_email`] ? 'error-input' : ''}
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                        {errors[`dest_${index}_email`] && (
+                          <span className="error-text">{errors[`dest_${index}_email`]}</span>
+                        )}
+                      </div>
+                      <div style={{ marginBottom: '10px' }}>
+                        <label htmlFor={`smtp_host_${index}`}>SMTP Host *</label>
+                        <input
+                          type="text"
+                          id={`smtp_host_${index}`}
+                          value={dest.smtp_host || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'smtp_host', e.target.value)}
+                          placeholder="smtp.gmail.com"
+                          className={errors[`dest_${index}_smtp_host`] ? 'error-input' : ''}
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                        <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                          Can also be set in Settings for all apps.
+                        </small>
+                        {errors[`dest_${index}_smtp_host`] && (
+                          <span className="error-text">{errors[`dest_${index}_smtp_host`]}</span>
+                        )}
+                      </div>
+                      <div style={{ marginBottom: '10px' }}>
+                        <label htmlFor={`smtp_port_${index}`}>SMTP Port</label>
+                        <input
+                          type="text"
+                          id={`smtp_port_${index}`}
+                          value={dest.smtp_port || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'smtp_port', e.target.value)}
+                          placeholder="587"
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                      </div>
+                      <div style={{ marginBottom: '10px' }}>
+                        <label htmlFor={`smtp_user_${index}`}>SMTP Username</label>
+                        <input
+                          type="text"
+                          id={`smtp_user_${index}`}
+                          value={dest.smtp_user || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'smtp_user', e.target.value)}
+                          placeholder="your-email@example.com"
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                        <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                          Can also be set in Settings for all apps.
+                        </small>
+                      </div>
+                      <div style={{ marginBottom: '10px' }}>
+                        <label htmlFor={`smtp_password_${index}`}>SMTP Password</label>
+                        <input
+                          type="password"
+                          id={`smtp_password_${index}`}
+                          value={dest.smtp_password || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'smtp_password', e.target.value)}
+                          placeholder="Your SMTP password"
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                        <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                          Can also be set in Settings for all apps.
+                        </small>
+                      </div>
+                      <div>
+                        <label htmlFor={`smtp_from_${index}`}>From Address</label>
+                        <input
+                          type="email"
+                          id={`smtp_from_${index}`}
+                          value={dest.smtp_from || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'smtp_from', e.target.value)}
+                          placeholder="sender@example.com"
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                      </div>
+                    </>
+                  )}
+                  
+                  {dest.type === 'generic' && (
+                    <>
+                      <div style={{ marginBottom: '10px' }}>
+                        <label htmlFor={`webhook_url_${index}`}>Webhook URL *</label>
+                        <input
+                          type="url"
+                          id={`webhook_url_${index}`}
+                          value={dest.webhook_url || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'webhook_url', e.target.value)}
+                          placeholder="https://example.com/webhook"
+                          className={errors[`dest_${index}_webhook_url`] ? 'error-input' : ''}
+                          style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                        />
+                        {errors[`dest_${index}_webhook_url`] && (
+                          <span className="error-text">{errors[`dest_${index}_webhook_url`]}</span>
+                        )}
+                      </div>
+                      <div>
+                        <label htmlFor={`payload_template_${index}`}>Custom Payload Template (JSON, optional)</label>
+                        <textarea
+                          id={`payload_template_${index}`}
+                          value={dest.payload_template || ''}
+                          onChange={(e) => handleDestinationFieldChange(index, 'payload_template', e.target.value)}
+                          placeholder='{"app": "{{app_name}}", "version": "{{version}}", "notes": "{{release_notes}}"}'
+                          rows="4"
+                          style={{ width: '100%', padding: '8px', marginTop: '5px', fontFamily: 'monospace' }}
+                        />
+                        <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                          Use placeholders: {'{{app_name}}'}, {'{{version}}'}, {'{{release_notes}}'}, {'{{formatted_content}}'}
+                        </small>
+                        {errors[`dest_${index}_payload_template`] && (
+                          <span className="error-text">{errors[`dest_${index}_payload_template`]}</span>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               ))}
@@ -965,6 +1290,13 @@ function SettingsPage({ onCancel, message, showMessage }) {
     default_interval: '12h',
     monitoring_enabled_by_default: true,
     auto_post_on_update: false,
+    telegram_bot_token: '',
+    smtp_host: '',
+    smtp_port: '587',
+    smtp_user: '',
+    smtp_password: '',
+    smtp_from: '',
+    smtp_use_tls: true,
     version: '1.8.5' // Will be loaded from backend
   });
   const [loading, setLoading] = useState(true);
@@ -1142,6 +1474,120 @@ function SettingsPage({ onCancel, message, showMessage }) {
                 <label htmlFor="auto_post_on_update">Auto-Post Notifications on Update</label>
               </div>
               <small>Automatically send notifications to all configured destinations when a new version is detected (in addition to checking).</small>
+            </div>
+
+            <div className="form-group" style={{ marginTop: '30px', paddingTop: '20px', borderTop: '1px solid #ddd' }}>
+              <h3 style={{ marginBottom: '15px' }}>Generic Webhook Settings</h3>
+              <p style={{ color: '#666', marginBottom: '20px' }}>
+                These settings can be used as defaults for all apps. Individual apps can override these values.
+              </p>
+              
+              <div style={{ marginBottom: '15px' }}>
+                <label htmlFor="telegram_bot_token">Telegram Bot Token</label>
+                <input
+                  type="text"
+                  id="telegram_bot_token"
+                  name="telegram_bot_token"
+                  value={settings.telegram_bot_token || ''}
+                  onChange={handleChange}
+                  placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                  style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                />
+                <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                  Get from @BotFather on Telegram. This will be used for all Telegram notifications unless overridden per app.
+                </small>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label htmlFor="smtp_host">SMTP Host</label>
+                <input
+                  type="text"
+                  id="smtp_host"
+                  name="smtp_host"
+                  value={settings.smtp_host || ''}
+                  onChange={handleChange}
+                  placeholder="smtp.gmail.com"
+                  style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                />
+                <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                  Default SMTP server for email notifications (e.g., smtp.gmail.com, smtp.outlook.com).
+                </small>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label htmlFor="smtp_port">SMTP Port</label>
+                <input
+                  type="text"
+                  id="smtp_port"
+                  name="smtp_port"
+                  value={settings.smtp_port || ''}
+                  onChange={handleChange}
+                  placeholder="587"
+                  style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                />
+                <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                  Default SMTP port (usually 587 for TLS, 465 for SSL, 25 for unencrypted).
+                </small>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label htmlFor="smtp_user">SMTP Username</label>
+                <input
+                  type="text"
+                  id="smtp_user"
+                  name="smtp_user"
+                  value={settings.smtp_user || ''}
+                  onChange={handleChange}
+                  placeholder="your-email@example.com"
+                  style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                />
+                <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                  Default SMTP username for authentication.
+                </small>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label htmlFor="smtp_password">SMTP Password</label>
+                <input
+                  type="password"
+                  id="smtp_password"
+                  name="smtp_password"
+                  value={settings.smtp_password || ''}
+                  onChange={handleChange}
+                  placeholder="Your SMTP password"
+                  style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                />
+                <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                  Default SMTP password. For Gmail, use an App Password.
+                </small>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label htmlFor="smtp_from">Default From Email Address</label>
+                <input
+                  type="email"
+                  id="smtp_from"
+                  name="smtp_from"
+                  value={settings.smtp_from || ''}
+                  onChange={handleChange}
+                  placeholder="sender@example.com"
+                  style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                />
+                <small style={{ display: 'block', marginTop: '5px', color: '#666' }}>
+                  Default sender email address for email notifications.
+                </small>
+              </div>
+
+              <div className="checkbox-group" style={{ marginBottom: '15px' }}>
+                <input
+                  type="checkbox"
+                  id="smtp_use_tls"
+                  name="smtp_use_tls"
+                  checked={settings.smtp_use_tls !== false}
+                  onChange={handleChange}
+                />
+                <label htmlFor="smtp_use_tls">Use TLS for SMTP</label>
+              </div>
             </div>
 
             <div className="form-actions">

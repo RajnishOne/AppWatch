@@ -42,7 +42,9 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 # Initialize components
 storage = StorageManager(Path('/data'))
 formatter = DiscordFormatter()
-monitor = AppStoreMonitor(storage, formatter)
+# Load settings for notification handler
+settings = storage.get_settings()
+monitor = AppStoreMonitor(storage, formatter, settings)
 
 # Global scheduler thread
 scheduler_thread = None
@@ -125,6 +127,90 @@ def format_interval(seconds):
         return f"{seconds}s"
 
 
+def validate_notification_destination(dest, settings=None):
+    """
+    Validate a notification destination
+    
+    Returns: (is_valid: bool, error_message: Optional[str])
+    """
+    if not isinstance(dest, dict):
+        return False, 'Each notification destination must be an object'
+    
+    dest_type = dest.get('type', '').lower().strip()
+    if not dest_type:
+        return False, 'Each notification destination must have a type'
+    
+    settings = settings or {}
+    
+    if dest_type == 'discord':
+        webhook_url = dest.get('webhook_url', '').strip()
+        if not webhook_url:
+            return False, 'Discord destination requires webhook_url'
+        if not webhook_url.startswith('https://discord.com/api/webhooks/'):
+            return False, 'Invalid Discord webhook URL'
+        return True, None
+    
+    elif dest_type == 'slack':
+        webhook_url = dest.get('webhook_url', '').strip()
+        if not webhook_url:
+            return False, 'Slack destination requires webhook_url'
+        if not webhook_url.startswith('https://hooks.slack.com/'):
+            return False, 'Invalid Slack webhook URL'
+        return True, None
+    
+    elif dest_type == 'telegram':
+        chat_id = dest.get('chat_id', '').strip()
+        bot_token = dest.get('bot_token', '').strip() or settings.get('telegram_bot_token', '').strip()
+        if not bot_token:
+            return False, 'Telegram destination requires bot_token (set in destination or settings)'
+        if not chat_id:
+            return False, 'Telegram destination requires chat_id'
+        return True, None
+    
+    elif dest_type == 'teams':
+        webhook_url = dest.get('webhook_url', '').strip()
+        if not webhook_url:
+            return False, 'Microsoft Teams destination requires webhook_url'
+        if not webhook_url.startswith('https://'):
+            return False, 'Invalid Microsoft Teams webhook URL (must be HTTPS)'
+        return True, None
+    
+    elif dest_type == 'email':
+        email = dest.get('email', '').strip()
+        if not email:
+            return False, 'Email destination requires email address'
+        # Basic email validation
+        if '@' not in email or '.' not in email.split('@')[1]:
+            return False, 'Invalid email address format'
+        
+        # Check if SMTP settings are available (either in dest or settings)
+        smtp_host = dest.get('smtp_host', '').strip() or settings.get('smtp_host', '').strip()
+        if not smtp_host:
+            return False, 'Email destination requires SMTP host (set in destination or settings)'
+        return True, None
+    
+    elif dest_type == 'generic':
+        webhook_url = dest.get('webhook_url', '').strip()
+        if not webhook_url:
+            return False, 'Generic webhook destination requires webhook_url'
+        if not webhook_url.startswith('http://') and not webhook_url.startswith('https://'):
+            return False, 'Invalid webhook URL (must start with http:// or https://)'
+        
+        # Validate payload_template if provided (must be valid JSON)
+        payload_template = dest.get('payload_template', '').strip()
+        if payload_template:
+            try:
+                import json
+                json.loads(payload_template)
+            except json.JSONDecodeError:
+                return False, 'Invalid JSON in payload_template'
+        
+        return True, None
+    
+    else:
+        return False, f'Unknown notification type: {dest_type}'
+
+
 def check_app(app_id):
     """Check a single app for updates"""
     try:
@@ -143,7 +229,7 @@ def check_app(app_id):
 
 
 def post_to_discord(app_id):
-    """Manually post current release notes to Discord"""
+    """Manually post current release notes to all configured notification destinations"""
     try:
         app = storage.get_app(app_id)
         if not app:
@@ -152,7 +238,7 @@ def post_to_discord(app_id):
         result = monitor.post_to_discord(app)
         return result, 200
     except Exception as e:
-        logger.error(f"Error posting to Discord for app {app_id}: {e}", exc_info=True)
+        logger.error(f"Error posting to notification destinations for app {app_id}: {e}", exc_info=True)
         return {'error': str(e)}, 500
 
 
@@ -264,17 +350,11 @@ def create_app():
         return jsonify({'error': 'notification_destinations must be an array'}), 400
     
     # Validate each destination
+    current_settings = storage.get_settings()
     for dest in notification_destinations:
-        if not isinstance(dest, dict):
-            return jsonify({'error': 'Each notification destination must be an object'}), 400
-        if 'type' not in dest:
-            return jsonify({'error': 'Each notification destination must have a type'}), 400
-        if dest['type'] == 'discord':
-            webhook_url = dest.get('webhook_url', '').strip()
-            if not webhook_url:
-                return jsonify({'error': 'Discord destination requires webhook_url'}), 400
-            if not webhook_url.startswith('https://discord.com/api/webhooks/'):
-                return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+        is_valid, error_msg = validate_notification_destination(dest, current_settings)
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
     
     # Legacy support - if webhook_url is provided but no notification_destinations, convert it
     if not notification_destinations and 'webhook_url' in data:
@@ -352,17 +432,11 @@ def update_app(app_id):
             return jsonify({'error': 'notification_destinations must be an array'}), 400
         
         # Validate each destination
+        current_settings = storage.get_settings()
         for dest in notification_destinations:
-            if not isinstance(dest, dict):
-                return jsonify({'error': 'Each notification destination must be an object'}), 400
-            if 'type' not in dest:
-                return jsonify({'error': 'Each notification destination must have a type'}), 400
-            if dest['type'] == 'discord':
-                webhook_url = dest.get('webhook_url', '').strip()
-                if not webhook_url:
-                    return jsonify({'error': 'Discord destination requires webhook_url'}), 400
-                if not webhook_url.startswith('https://discord.com/api/webhooks/'):
-                    return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+            is_valid, error_msg = validate_notification_destination(dest, current_settings)
+            if not is_valid:
+                return jsonify({'error': error_msg}), 400
         
         app['notification_destinations'] = notification_destinations
     
@@ -427,7 +501,7 @@ def check_app_endpoint(app_id):
 
 @app.route('/api/apps/<app_id>/post', methods=['POST'])
 def post_app_endpoint(app_id):
-    """Manually post release notes to Discord"""
+    """Manually post release notes to all configured notification destinations"""
     result, status_code = post_to_discord(app_id)
     return jsonify(result), status_code
 
@@ -498,6 +572,10 @@ def update_settings():
         if 'default_interval' in data:
             setup_scheduler()
         
+        # Reload monitor with new settings
+        global monitor
+        monitor = AppStoreMonitor(storage, formatter, current_settings)
+        
         return jsonify(current_settings)
     except Exception as e:
         logger.error(f"Error updating settings: {e}", exc_info=True)
@@ -510,6 +588,13 @@ try:
     setup_scheduler()
 except Exception as e:
     logger.error(f"Failed to initialize scheduler: {e}", exc_info=True)
+
+# Reload monitor when settings change (helper function)
+def reload_monitor():
+    """Reload monitor with current settings"""
+    global monitor
+    current_settings = storage.get_settings()
+    monitor = AppStoreMonitor(storage, formatter, current_settings)
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8192))

@@ -5,6 +5,7 @@ import logging
 import requests
 from datetime import datetime
 from pathlib import Path
+from backend.notifier import NotificationHandler
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,10 @@ class AppStoreMonitor:
     
     ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
     
-    def __init__(self, storage, formatter):
+    def __init__(self, storage, formatter, settings=None):
         self.storage = storage
         self.formatter = formatter
+        self.notifier = NotificationHandler(settings)
     
     def fetch_app_info(self, app_store_id):
         """Fetch app information from iTunes Lookup API"""
@@ -116,20 +118,21 @@ class AppStoreMonitor:
             
             # New version detected - post to all configured destinations
             formatted_notes = self.formatter.format_release_notes(current_version, release_notes)
+            app_name = app.get('name', 'App')
             
             # Post to all notification destinations
             success_count = 0
             error_messages = []
             
             for dest in notification_destinations:
-                dest_type = dest.get('type', 'discord')
-                if dest_type == 'discord':
-                    webhook_url = dest.get('webhook_url', '').strip()
-                    if webhook_url:
-                        if self._post_to_discord_webhook(webhook_url, formatted_notes):
-                            success_count += 1
-                        else:
-                            error_messages.append(f'Failed to post to Discord webhook')
+                success, error_msg = self.notifier.send_notification(
+                    dest, app_name, current_version, release_notes, formatted_notes
+                )
+                if success:
+                    success_count += 1
+                else:
+                    dest_type = dest.get('type', 'unknown')
+                    error_messages.append(f'{dest_type}: {error_msg or "Failed"}')
             
             if success_count > 0:
                 # Update last posted version if at least one destination succeeded
@@ -197,19 +200,20 @@ class AppStoreMonitor:
             
             # Format and post to all destinations
             formatted_notes = self.formatter.format_release_notes(current_version, release_notes)
+            app_name = app.get('name', 'App')
             
             success_count = 0
             error_messages = []
             
             for dest in notification_destinations:
-                dest_type = dest.get('type', 'discord')
-                if dest_type == 'discord':
-                    webhook_url = dest.get('webhook_url', '').strip()
-                    if webhook_url:
-                        if self._post_to_discord_webhook(webhook_url, formatted_notes):
-                            success_count += 1
-                        else:
-                            error_messages.append(f'Failed to post to Discord webhook')
+                success, error_msg = self.notifier.send_notification(
+                    dest, app_name, current_version, release_notes, formatted_notes
+                )
+                if success:
+                    success_count += 1
+                else:
+                    dest_type = dest.get('type', 'unknown')
+                    error_messages.append(f'{dest_type}: {error_msg or "Failed"}')
             
             if success_count > 0:
                 # Update last posted version if at least one destination succeeded
@@ -241,18 +245,4 @@ class AppStoreMonitor:
                 'error': str(e)
             }
     
-    def _post_to_discord_webhook(self, webhook_url, content):
-        """Post content to Discord webhook"""
-        try:
-            payload = {
-                'content': content
-            }
-            
-            response = requests.post(webhook_url, json=payload, timeout=10)
-            response.raise_for_status()
-            
-            return True
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error posting to Discord webhook: {e}")
-            return False
 

@@ -33,7 +33,14 @@ class StorageManager:
             default_settings = {
                 'default_interval': '12h',
                 'monitoring_enabled_by_default': True,
-                'auto_post_on_update': False
+                'auto_post_on_update': False,
+                'telegram_bot_token': '',
+                'smtp_host': '',
+                'smtp_port': '587',
+                'smtp_user': '',
+                'smtp_password': '',
+                'smtp_from': '',
+                'smtp_use_tls': True
             }
             self._save_settings(default_settings)
     
@@ -64,7 +71,14 @@ class StorageManager:
         defaults = {
             'default_interval': '12h',
             'monitoring_enabled_by_default': True,
-            'auto_post_on_update': False
+            'auto_post_on_update': False,
+            'telegram_bot_token': '',
+            'smtp_host': '',
+            'smtp_port': '587',
+            'smtp_user': '',
+            'smtp_password': '',
+            'smtp_from': '',
+            'smtp_use_tls': True
         }
         # Merge defaults with loaded settings (loaded settings take precedence)
         return {**defaults, **settings}
