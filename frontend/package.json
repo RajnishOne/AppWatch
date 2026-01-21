@@ -1,5 +1,5 @@
 {
-  "name": "app-release-watcher-frontend",
+  "name": "app-watch-frontend",
   "version": "1.0.0",
   "private": true,
   "dependencies": {

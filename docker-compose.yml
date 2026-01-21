@@ -1,9 +1,9 @@
 services:
-  app-release-watcher:
-    image: rajnishdock/app-release-watcher:latest
-    container_name: app-release-watcher
+  app-watch:
+    image: rajnishdock/app-watch:latest
+    container_name: app-watch
     restart: unless-stopped
     ports:
       - "8192:8192"
     volumes:
-      - /docker-data/app-release-watcher/data:/data
+      - /docker-data/app-watch/data:/data

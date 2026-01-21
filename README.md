@@ -24,9 +24,9 @@ Create a file named `docker-compose.yml` in a folder on your computer. Copy and 
 
 ```yaml
 services:
-  app-release-watcher:
-    image: rajnishdock/app-release-watcher:latest
-    container_name: app-release-watcher
+  app-watch:
+    image: rajnishdock/app-watch:latest
+    container_name: app-watch
     restart: unless-stopped
     ports:
       - "8192:8192"
@@ -187,12 +187,12 @@ docker compose restart
 
 **View logs:**
 ```bash
-docker logs app-release-watcher
+docker logs app-watch
 ```
 
 **View logs in real-time:**
 ```bash
-docker logs -f app-release-watcher
+docker logs -f app-watch
 ```
 
 ### Alternative Deployment Methods
@@ -201,11 +201,11 @@ docker logs -f app-release-watcher
 
 ```bash
 docker run -d \
-  --name app-release-watcher \
+  --name app-watch \
   --restart unless-stopped \
   -p 8192:8192 \
   -v $(pwd)/data:/data \
-  rajnishdock/app-release-watcher:latest
+  rajnishdock/app-watch:latest
 ```
 
 **Building from Source:**
@@ -214,8 +214,8 @@ If you want to build from source or make modifications:
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/app-release-watcher.git
-cd app-release-watcher
+git clone https://github.com/YOUR_USERNAME/app-watch.git
+cd app-watch
 
 # Build frontend
 cd frontend
@@ -246,9 +246,9 @@ You can customize the application behavior using environment variables in your `
 
 ```yaml
 services:
-  app-release-watcher:
-    image: rajnishdock/app-release-watcher:latest
-    container_name: app-release-watcher
+  app-watch:
+    image: rajnishdock/app-watch:latest
+    container_name: app-watch
     restart: unless-stopped
     ports:
       - "8192:8192"
@@ -313,7 +313,7 @@ Each app can be configured individually through the web interface:
 
 **No notifications received:**
 - Use the "Post Now" button to test manually
-- Check the container logs for errors: `docker logs app-release-watcher`
+- Check the container logs for errors: `docker logs app-watch`
 - Verify the app is enabled in the web interface
 
 ### App Not Detecting Updates
@@ -331,7 +331,7 @@ Each app can be configured individually through the web interface:
 **App Store API issues:**
 - The App Store API may be slow or temporarily unavailable
 - Wait a few minutes and try the "Check Now" button again
-- Check container logs for API errors: `docker logs app-release-watcher`
+- Check container logs for API errors: `docker logs app-watch`
 
 ### Common Errors
 
