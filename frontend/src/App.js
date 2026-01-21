@@ -6,8 +6,7 @@ const API_BASE = window.location.origin;
 function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard', 'add-app', or 'settings'
+  const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard', 'add-app', 'edit-app', or 'settings'
   const [editingApp, setEditingApp] = useState(null);
   const [message, setMessage] = useState(null);
   const [checking, setChecking] = useState({});
@@ -21,10 +20,39 @@ function App() {
       const path = window.location.pathname;
       if (path === '/add-app' || path.includes('/add-app')) {
         setCurrentPage('add-app');
+        setEditingApp(null);
+      } else if (path.includes('/edit-app/')) {
+        setCurrentPage('edit-app');
+        // If editingApp is not set, try to load it from URL
+        // This handles direct navigation to edit URL
+        const appId = path.split('/edit-app/')[1];
+        if (appId && !editingApp) {
+          // Load apps and find the one to edit
+          fetch(`${API_BASE}/api/apps`)
+            .then(response => response.json())
+            .then(apps => {
+              const app = apps.find(a => a.id === appId);
+              if (app) {
+                setEditingApp(app);
+              } else {
+                // App not found, redirect to dashboard
+                setCurrentPage('dashboard');
+                setEditingApp(null);
+                window.history.replaceState({ page: 'dashboard' }, '', '/');
+              }
+            })
+            .catch(error => {
+              console.error('Error loading app:', error);
+              setCurrentPage('dashboard');
+              setEditingApp(null);
+              window.history.replaceState({ page: 'dashboard' }, '', '/');
+            });
+        }
       } else if (path === '/settings' || path.includes('/settings')) {
         setCurrentPage('settings');
       } else {
         setCurrentPage('dashboard');
+        setEditingApp(null);
       }
     };
     
@@ -83,7 +111,20 @@ function App() {
 
   const handleEditApp = (app) => {
     setEditingApp(app);
-    setShowModal(true);
+    setCurrentPage('edit-app');
+    window.history.pushState({ page: 'edit-app' }, '', `/edit-app/${app.id}`);
+  };
+  
+  const handleCancelEditApp = () => {
+    // Navigate back in history
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      // If no history, just go to root
+      setCurrentPage('dashboard');
+      setEditingApp(null);
+      window.history.replaceState({ page: 'dashboard' }, '', '/');
+    }
   };
 
   const handleDeleteApp = async (appId) => {
@@ -161,11 +202,12 @@ function App() {
 
   const handleSaveApp = async (formData) => {
     try {
-      const url = editingApp
-        ? `${API_BASE}/api/apps/${editingApp.id}`
+      const appId = formData.id || editingApp?.id;
+      const url = appId
+        ? `${API_BASE}/api/apps/${appId}`
         : `${API_BASE}/api/apps`;
       
-      const method = editingApp ? 'PUT' : 'POST';
+      const method = appId ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
         method,
@@ -176,8 +218,7 @@ function App() {
       });
 
       if (response.ok) {
-        showMessage(editingApp ? 'App updated successfully' : 'App added successfully');
-        setShowModal(false);
+        showMessage(appId ? 'App updated successfully' : 'App added successfully');
         setCurrentPage('dashboard');
         setEditingApp(null);
         window.history.pushState({ page: 'dashboard' }, '', '/');
@@ -207,6 +248,20 @@ function App() {
         onCancel={handleCancelAddApp}
         message={message}
         showMessage={showMessage}
+        editingApp={null}
+      />
+    );
+  }
+
+  // Show edit app page
+  if (currentPage === 'edit-app' && editingApp) {
+    return (
+      <AddAppPage
+        onSave={handleSaveApp}
+        onCancel={handleCancelEditApp}
+        message={message}
+        showMessage={showMessage}
+        editingApp={editingApp}
       />
     );
   }
@@ -284,16 +339,6 @@ function App() {
         </div>
       )}
 
-      {showModal && (
-        <AppModal
-          app={editingApp}
-          onClose={() => {
-            setShowModal(false);
-            setEditingApp(null);
-          }}
-          onSave={handleSaveApp}
-        />
-      )}
     </div>
   );
 }
@@ -439,44 +484,59 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
   );
 }
 
-function AddAppPage({ onSave, onCancel, message, showMessage }) {
+function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
+  // Initialize destinations from editingApp if provided
+  const initializeDestinations = () => {
+    if (editingApp?.notification_destinations && editingApp.notification_destinations.length > 0) {
+      return editingApp.notification_destinations.map(dest => ({
+        type: dest.type || 'discord',
+        webhook_url: dest.webhook_url || ''
+      }));
+    } else if (editingApp?.webhook_url) {
+      // Legacy support - convert old webhook_url to new format
+      return [{ type: 'discord', webhook_url: editingApp.webhook_url }];
+    }
+    return [{ type: '', webhook_url: '' }];
+  };
+
   const [formData, setFormData] = useState({
-    name: '',
-    app_store_id: '',
-    notification_destinations: [],
-    interval_override: '',
-    enabled: true
+    name: editingApp?.name || '',
+    app_store_id: editingApp?.app_store_id || '',
+    interval_override: editingApp?.interval_override || '',
+    enabled: editingApp?.enabled !== false
   });
 
   const [errors, setErrors] = useState({});
-  const [destinations, setDestinations] = useState([{ type: '', webhook_url: '' }]);
+  const [destinations, setDestinations] = useState(initializeDestinations);
   
   useEffect(() => {
     // Update document title
-    document.title = 'Add New App - App Release Watcher';
+    document.title = editingApp ? 'Edit App - App Release Watcher' : 'Add New App - App Release Watcher';
     
-    // Load default monitoring setting
-    const loadDefaultSettings = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/settings`);
-        if (response.ok) {
-          const settings = await response.json();
-          setFormData(prev => ({
-            ...prev,
-            enabled: settings.monitoring_enabled_by_default !== false
-          }));
+    // Load default monitoring setting only if not editing
+    if (!editingApp) {
+      const loadDefaultSettings = async () => {
+        try {
+          const response = await fetch(`${API_BASE}/api/settings`);
+          if (response.ok) {
+            const settings = await response.json();
+            setFormData(prev => ({
+              ...prev,
+              enabled: settings.monitoring_enabled_by_default !== false
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading settings:', error);
         }
-      } catch (error) {
-        console.error('Error loading settings:', error);
-      }
-    };
-    
-    loadDefaultSettings();
+      };
+      
+      loadDefaultSettings();
+    }
     
     return () => {
       document.title = 'App Release Watcher';
     };
-  }, []);
+  }, [editingApp]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -621,6 +681,11 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
       notification_destinations: notificationDestinations
     };
     
+    // Include app ID if editing
+    if (editingApp) {
+      submitData.id = editingApp.id;
+    }
+    
     await onSave(submitData);
   };
 
@@ -633,7 +698,7 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
-        <h1>Add New App</h1>
+        <h1>{editingApp ? 'Edit App' : 'Add New App'}</h1>
       </div>
 
       <div className="add-app-content">
@@ -645,8 +710,8 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
           )}
 
           <div className="form-prompt">
-            <h2>Let's start with the details for your app</h2>
-            <p className="form-subtitle">Fill in the information below to start monitoring app releases</p>
+            <h2>{editingApp ? 'Edit your app details' : "Let's start with the details for your app"}</h2>
+            <p className="form-subtitle">{editingApp ? 'Update the information below to modify app monitoring settings' : 'Fill in the information below to start monitoring app releases'}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="add-app-form">
@@ -761,204 +826,12 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
                 className="btn btn-primary btn-large"
                 disabled={!isFormValid()}
               >
-                Save
+                {editingApp ? 'Update' : 'Save'}
               </button>
             </div>
           </form>
         </div>
 
-      </div>
-    </div>
-  );
-}
-
-function AppModal({ app, onClose, onSave }) {
-  // Initialize destinations from app data
-  const initializeDestinations = () => {
-    if (app?.notification_destinations && app.notification_destinations.length > 0) {
-      return app.notification_destinations.map(dest => ({
-        type: dest.type || 'discord',
-        webhook_url: dest.webhook_url || ''
-      }));
-    } else if (app?.webhook_url) {
-      // Legacy support - convert old webhook_url to new format
-      return [{ type: 'discord', webhook_url: app.webhook_url }];
-    }
-    return [{ type: '', webhook_url: '' }];
-  };
-
-  const [formData, setFormData] = useState({
-    name: app?.name || '',
-    app_store_id: app?.app_store_id || '',
-    interval_override: app?.interval_override || '',
-    enabled: app?.enabled !== false
-  });
-
-  const [destinations, setDestinations] = useState(initializeDestinations);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    // Build notification destinations array - only include destinations with a type
-    const notificationDestinations = destinations
-      .filter(dest => dest.type)
-      .map(dest => ({
-        type: dest.type,
-        webhook_url: dest.webhook_url.trim()
-      }));
-
-    const submitData = {
-      ...formData,
-      notification_destinations: notificationDestinations
-    };
-    
-    onSave(submitData);
-  };
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
-
-  const handleDestinationTypeChange = (index, value) => {
-    setDestinations(prev => {
-      const newDests = [...prev];
-      newDests[index] = { type: value, webhook_url: value === 'discord' ? newDests[index].webhook_url : '' };
-      
-      // If a destination is selected and it's not the last one, add a new empty destination
-      if (value && index === newDests.length - 1) {
-        newDests.push({ type: '', webhook_url: '' });
-      }
-      
-      // Remove empty destinations at the end (except the last one)
-      while (newDests.length > 1 && !newDests[newDests.length - 2].type && !newDests[newDests.length - 1].type) {
-        newDests.pop();
-      }
-      
-      return newDests;
-    });
-  };
-
-  const handleWebhookChange = (index, value) => {
-    setDestinations(prev => {
-      const newDests = [...prev];
-      newDests[index] = { ...newDests[index], webhook_url: value };
-      return newDests;
-    });
-  };
-
-  return (
-    <div className="modal" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{app ? 'Edit App' : 'Add App'}</h2>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="name">App Name *</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              placeholder="My App"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="app_store_id">App Store ID *</label>
-            <input
-              type="text"
-              id="app_store_id"
-              name="app_store_id"
-              value={formData.app_store_id}
-              onChange={handleChange}
-              required
-              placeholder="123456789"
-            />
-            <small>Find this in the App Store URL: apps.apple.com/app/id123456789</small>
-          </div>
-
-          <div className="form-group">
-            <label>Notification Destinations (optional)</label>
-            <small style={{ display: 'block', marginBottom: '10px', color: '#666' }}>
-              Add one or more notification destinations. You can add multiple destinations of the same type.
-            </small>
-            {destinations.map((dest, index) => (
-              <div key={index} style={{ marginBottom: '15px', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}>
-                <div style={{ marginBottom: '10px' }}>
-                  <label htmlFor={`modal_destination_type_${index}`}>
-                    {index === 0 ? 'Notification Destination' : `Additional Destination ${index + 1}`}
-                  </label>
-                  <select
-                    id={`modal_destination_type_${index}`}
-                    value={dest.type}
-                    onChange={(e) => handleDestinationTypeChange(index, e.target.value)}
-                    style={{ width: '100%', padding: '8px', marginTop: '5px' }}
-                  >
-                    <option value="">Select a destination (optional)</option>
-                    <option value="discord">Discord</option>
-                  </select>
-                </div>
-                
-                {dest.type === 'discord' && (
-                  <div>
-                    <label htmlFor={`modal_webhook_url_${index}`}>Discord Webhook URL</label>
-                    <input
-                      type="url"
-                      id={`modal_webhook_url_${index}`}
-                      value={dest.webhook_url}
-                      onChange={(e) => handleWebhookChange(index, e.target.value)}
-                      placeholder="https://discord.com/api/webhooks/..."
-                      style={{ width: '100%', padding: '8px', marginTop: '5px' }}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="interval_override">Check Interval (optional)</label>
-            <input
-              type="text"
-              id="interval_override"
-              name="interval_override"
-              value={formData.interval_override}
-              onChange={handleChange}
-              placeholder="6h, 30m, 1d"
-            />
-            <small>Override default interval (e.g., 6h, 30m, 1d). Leave empty for default.</small>
-          </div>
-
-          <div className="form-group">
-            <div className="checkbox-group">
-              <input
-                type="checkbox"
-                id="enabled"
-                name="enabled"
-                checked={formData.enabled}
-                onChange={handleChange}
-              />
-              <label htmlFor="enabled">Enable monitoring</label>
-            </div>
-          </div>
-
-          <div className="button-group" style={{ marginTop: '20px' }}>
-            <button type="submit" className="btn btn-primary">
-              {app ? 'Update' : 'Add'} App
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );
