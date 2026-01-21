@@ -3,6 +3,9 @@ import './index.css';
 
 const API_BASE = window.location.origin;
 
+// Favicon path - use this constant so favicon can be changed in one place
+const FAVICON_PATH = '/icon-192.png';
+
 // Helper function to get auth headers
 const getAuthHeaders = () => {
   const token = localStorage.getItem('auth_token');
@@ -580,7 +583,9 @@ function App() {
     <div className="container">
       <div className="header">
         <div className="header-left">
-          <div className="logo">📱</div>
+          <div className="logo">
+            <img src={FAVICON_PATH} alt="App Watch" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
+          </div>
           <div className="header-text">
             <h1>App Watch</h1>
             <p>Monitor iOS App Store apps for new releases and Notify</p>
@@ -706,11 +711,12 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
                 flexShrink: 0
               }}
               onError={(e) => {
-                // Final fallback to emoji if default icon fails
+                // Final fallback to favicon if default icon fails
                 e.target.style.display = 'none';
-                const fallback = document.createElement('div');
-                fallback.style.cssText = 'width: 48px; height: 48px; border-radius: 10px; background-color: #e0e0e0; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;';
-                fallback.textContent = '📱';
+                const fallback = document.createElement('img');
+                fallback.src = FAVICON_PATH;
+                fallback.alt = app.name;
+                fallback.style.cssText = 'width: 48px; height: 48px; border-radius: 10px; object-fit: contain; background-color: #e0e0e0; flex-shrink: 0;';
                 e.target.parentNode.insertBefore(fallback, e.target);
               }}
             />
@@ -2114,7 +2120,9 @@ function OnboardingPage({ onSetup, message, showMessage }) {
       <div className="auth-content">
         <div className="auth-form-section">
           <div className="auth-header">
-            <div className="logo">📱</div>
+            <div className="logo">
+              <img src={FAVICON_PATH} alt="App Watch" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
+            </div>
             <h1>Welcome to App Watch</h1>
             <p className="auth-subtitle">Let's set up authentication to secure your application</p>
           </div>
@@ -2546,7 +2554,9 @@ function LoginPage({ onLogin, authType, message, showMessage }) {
       <div className="auth-content">
         <div className="auth-form-section">
           <div className="auth-header">
-            <div className="logo">📱</div>
+            <div className="logo">
+              <img src={FAVICON_PATH} alt="App Watch" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
+            </div>
             <h1>App Watch</h1>
             <p className="auth-subtitle">Please sign in to continue</p>
           </div>

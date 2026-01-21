@@ -54,6 +54,13 @@ code {
 .logo {
   font-size: 36px;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo img {
+  display: block;
 }
 
 .header-text {
@@ -605,6 +612,11 @@ code {
     font-size: 28px;
   }
   
+  .logo img {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  
   .header h1 {
     font-size: 20px;
   }
@@ -800,6 +812,11 @@ code {
   margin-bottom: 16px;
 }
 
+.auth-header .logo img {
+  width: 48px;
+  height: 48px;
+}
+
 .auth-header h1 {
   color: #333;
   font-size: 32px;
@@ -888,6 +905,11 @@ code {
   
   .auth-header .logo {
     font-size: 36px;
+  }
+  
+  .auth-header .logo img {
+    width: 36px !important;
+    height: 36px !important;
   }
 }
 
