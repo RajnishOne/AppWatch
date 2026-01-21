@@ -243,8 +243,8 @@ function App() {
         <div className="header-right">
           <button className="settings-icon-btn" onClick={handleSettingsClick} aria-label="Settings">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
               <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3m15.364 6.364l-4.243-4.243m-4.242 0L5.636 17.364m12.728 0l-4.243-4.243m-4.242 0L5.636 6.636"></path>
             </svg>
           </button>
         </div>
@@ -676,14 +676,6 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
           </form>
         </div>
 
-        <div className="add-app-visual-section">
-          <div className="visual-icons">
-            <div className="visual-icon icon-1">📱</div>
-            <div className="visual-icon icon-2">🔔</div>
-            <div className="visual-icon icon-3">🚀</div>
-            <div className="visual-icon icon-4">⚡</div>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -803,7 +795,8 @@ function SettingsPage({ onCancel, message, showMessage }) {
   const [settings, setSettings] = useState({
     default_interval: '12h',
     monitoring_enabled_by_default: true,
-    auto_post_on_update: false
+    auto_post_on_update: false,
+    version: '1.8.5' // Will be loaded from backend
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -882,12 +875,14 @@ function SettingsPage({ onCancel, message, showMessage }) {
 
     try {
       setSaving(true);
+      // Don't send version to backend
+      const { version, ...settingsToSave } = settings;
       const response = await fetch(`${API_BASE}/api/settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(settings)
+        body: JSON.stringify(settingsToSave)
       });
 
       if (response.ok) {
@@ -998,6 +993,11 @@ function SettingsPage({ onCancel, message, showMessage }) {
               </button>
             </div>
           </form>
+
+          <div className="version-info">
+            <div className="version-label">Version</div>
+            <div className="version-value">{settings.version || '1.8.5'}</div>
+          </div>
         </div>
       </div>
     </div>

@@ -20,6 +20,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Accept version as build argument (optional)
+ARG APP_VERSION
+ENV APP_VERSION=${APP_VERSION}
+
 # Install curl for healthcheck
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 

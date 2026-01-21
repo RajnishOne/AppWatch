@@ -18,6 +18,10 @@ import schedule
 from backend.app_store import AppStoreMonitor
 from backend.formatter import DiscordFormatter
 from backend.storage import StorageManager
+from backend.version import get_version
+
+# Application version - dynamically fetched
+APP_VERSION = get_version()
 
 # Configure logging
 logging.basicConfig(
@@ -219,6 +223,7 @@ def status():
     """Health check endpoint"""
     return jsonify({
         'status': 'ok',
+        'version': APP_VERSION,
         'timestamp': datetime.now().isoformat(),
         'scheduler_running': scheduler_running
     })
@@ -370,6 +375,7 @@ def get_settings():
     """Get application settings"""
     try:
         settings = storage.get_settings()
+        settings['version'] = APP_VERSION
         return jsonify(settings)
     except Exception as e:
         logger.error(f"Error getting settings: {e}", exc_info=True)
