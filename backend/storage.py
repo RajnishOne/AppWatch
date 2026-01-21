@@ -23,9 +23,11 @@ class StorageManager:
         self.apps_file = self.data_dir / 'apps.json'
         self.settings_file = self.data_dir / 'settings.json'
         self.auth_file = self.data_dir / 'auth.json'
+        self.history_file = self.data_dir / 'history.json'
         self._ensure_apps_file()
         self._ensure_settings_file()
         self._ensure_auth_file()
+        self._ensure_history_file()
     
     def _ensure_apps_file(self):
         """Ensure apps.json exists"""
@@ -61,6 +63,11 @@ class StorageManager:
                 'api_key': self._generate_api_key()
             }
             self._save_auth(default_auth)
+    
+    def _ensure_history_file(self):
+        """Ensure history.json exists"""
+        if not self.history_file.exists():
+            self._save_history([])
     
     def _load_settings(self):
         """Load settings from JSON file"""
@@ -407,4 +414,120 @@ class StorageManager:
         auth = self.get_auth()
         stored_key = auth.get('api_key', '')
         return bool(stored_key and api_key == stored_key)
+    
+    # History/Activity log methods
+    def _load_history(self):
+        """Load history from JSON file"""
+        try:
+            if self.history_file.exists():
+                with open(self.history_file, 'r') as f:
+                    return json.load(f)
+            return []
+        except Exception as e:
+            logger.error(f"Error loading history: {e}")
+            return []
+    
+    def _save_history(self, history_list):
+        """Save history to JSON file"""
+        try:
+            with open(self.history_file, 'w') as f:
+                json.dump(history_list, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving history: {e}")
+            raise
+    
+    def add_history_entry(self, event_type, app_id=None, app_name=None, status='info', message='', details=None):
+        """
+        Add an entry to the activity history
+        
+        Args:
+            event_type: Type of event (check, post, app_created, app_updated, etc.)
+            app_id: ID of the app (if applicable)
+            app_name: Name of the app (if applicable)
+            status: Status of the event ('success', 'error', 'warning', 'info')
+            message: Human-readable message
+            details: Additional details (dict)
+        """
+        entry = {
+            'id': str(uuid.uuid4()),
+            'timestamp': datetime.now().isoformat(),
+            'event_type': event_type,
+            'app_id': app_id,
+            'app_name': app_name,
+            'status': status,
+            'message': message,
+            'details': details or {}
+        }
+        
+        history = self._load_history()
+        history.insert(0, entry)  # Add to beginning (newest first)
+        
+        # Limit history to last 1000 entries to prevent file from growing too large
+        MAX_HISTORY_ENTRIES = 1000
+        if len(history) > MAX_HISTORY_ENTRIES:
+            history = history[:MAX_HISTORY_ENTRIES]
+        
+        self._save_history(history)
+        return entry
+    
+    def get_history(self, limit=100, event_type=None, app_id=None, status=None, start_date=None, end_date=None):
+        """
+        Get activity history with optional filtering
+        
+        Args:
+            limit: Maximum number of entries to return
+            event_type: Filter by event type
+            app_id: Filter by app ID
+            status: Filter by status (success, error, warning, info)
+            start_date: Filter entries after this date (ISO format)
+            end_date: Filter entries before this date (ISO format)
+        
+        Returns:
+            List of history entries
+        """
+        history = self._load_history()
+        
+        # Apply filters
+        filtered = []
+        for entry in history:
+            # Event type filter
+            if event_type and entry.get('event_type') != event_type:
+                continue
+            
+            # App ID filter
+            if app_id and entry.get('app_id') != app_id:
+                continue
+            
+            # Status filter
+            if status and entry.get('status') != status:
+                continue
+            
+            # Date filters
+            if start_date:
+                if entry.get('timestamp', '') < start_date:
+                    continue
+            if end_date:
+                if entry.get('timestamp', '') > end_date:
+                    continue
+            
+            filtered.append(entry)
+        
+        # Apply limit
+        return filtered[:limit]
+    
+    def clear_history(self, older_than_days=None):
+        """
+        Clear history entries
+        
+        Args:
+            older_than_days: If provided, only clear entries older than this many days
+        """
+        if older_than_days:
+            from datetime import timedelta
+            cutoff_date = (datetime.now() - timedelta(days=older_than_days)).isoformat()
+            history = self._load_history()
+            filtered = [e for e in history if e.get('timestamp', '') >= cutoff_date]
+            self._save_history(filtered)
+        else:
+            self._save_history([])
 

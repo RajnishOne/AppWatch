@@ -123,16 +123,19 @@ class AppStoreMonitor:
             # Post to all notification destinations
             success_count = 0
             error_messages = []
+            destination_results = []
             
             for dest in notification_destinations:
+                dest_type = dest.get('type', 'unknown')
                 success, error_msg = self.notifier.send_notification(
                     dest, app_name, current_version, release_notes, formatted_notes
                 )
                 if success:
                     success_count += 1
+                    destination_results.append({'type': dest_type, 'status': 'success'})
                 else:
-                    dest_type = dest.get('type', 'unknown')
                     error_messages.append(f'{dest_type}: {error_msg or "Failed"}')
+                    destination_results.append({'type': dest_type, 'status': 'error', 'error': error_msg})
             
             if success_count > 0:
                 # Update last posted version if at least one destination succeeded
@@ -140,6 +143,23 @@ class AppStoreMonitor:
                 message = f'New version posted to {success_count} destination(s)'
                 if error_messages:
                     message += f' ({len(error_messages)} failed)'
+                
+                # Log successful post
+                self.storage.add_history_entry(
+                    event_type='post',
+                    app_id=app_id,
+                    app_name=app_name,
+                    status='success',
+                    message=f'New version {current_version} posted to {success_count} destination(s)',
+                    details={
+                        'version': current_version,
+                        'previous_version': last_version,
+                        'success_count': success_count,
+                        'failed_count': len(error_messages),
+                        'destinations': destination_results
+                    }
+                )
+                
                 return {
                     'success': True,
                     'message': message,
@@ -152,6 +172,21 @@ class AppStoreMonitor:
                 error_msg = 'Failed to post to any notification destination'
                 if error_messages:
                     error_msg = '; '.join(error_messages)
+                
+                # Log failed post
+                self.storage.add_history_entry(
+                    event_type='post',
+                    app_id=app_id,
+                    app_name=app_name,
+                    status='error',
+                    message=f'Failed to post version {current_version}',
+                    details={
+                        'version': current_version,
+                        'error': error_msg,
+                        'destinations': destination_results
+                    }
+                )
+                
                 return {
                     'success': False,
                     'error': error_msg,
@@ -204,16 +239,19 @@ class AppStoreMonitor:
             
             success_count = 0
             error_messages = []
+            destination_results = []
             
             for dest in notification_destinations:
+                dest_type = dest.get('type', 'unknown')
                 success, error_msg = self.notifier.send_notification(
                     dest, app_name, current_version, release_notes, formatted_notes
                 )
                 if success:
                     success_count += 1
+                    destination_results.append({'type': dest_type, 'status': 'success'})
                 else:
-                    dest_type = dest.get('type', 'unknown')
                     error_messages.append(f'{dest_type}: {error_msg or "Failed"}')
+                    destination_results.append({'type': dest_type, 'status': 'error', 'error': error_msg})
             
             if success_count > 0:
                 # Update last posted version if at least one destination succeeded
@@ -221,6 +259,23 @@ class AppStoreMonitor:
                 message = f'Posted to {success_count} destination(s)'
                 if error_messages:
                     message += f' ({len(error_messages)} failed)'
+                
+                # Log successful manual post
+                self.storage.add_history_entry(
+                    event_type='post',
+                    app_id=app_id,
+                    app_name=app_name,
+                    status='success',
+                    message=f'Manually posted version {current_version} to {success_count} destination(s)',
+                    details={
+                        'version': current_version,
+                        'success_count': success_count,
+                        'failed_count': len(error_messages),
+                        'destinations': destination_results,
+                        'manual': True
+                    }
+                )
+                
                 return {
                     'success': True,
                     'message': message,
@@ -231,6 +286,22 @@ class AppStoreMonitor:
                 error_msg = 'Failed to post to any notification destination'
                 if error_messages:
                     error_msg = '; '.join(error_messages)
+                
+                # Log failed manual post
+                self.storage.add_history_entry(
+                    event_type='post',
+                    app_id=app_id,
+                    app_name=app_name,
+                    status='error',
+                    message=f'Failed to manually post version {current_version}',
+                    details={
+                        'version': current_version,
+                        'error': error_msg,
+                        'destinations': destination_results,
+                        'manual': True
+                    }
+                )
+                
                 return {
                     'success': False,
                     'error': error_msg,

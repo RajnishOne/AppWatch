@@ -227,6 +227,8 @@ function App() {
         }
       } else if (path === '/settings' || path.includes('/settings')) {
         setCurrentPage('settings');
+      } else if (path === '/activity' || path.includes('/activity')) {
+        setCurrentPage('activity');
       } else {
         setCurrentPage('dashboard');
         setEditingApp(null);
@@ -549,9 +551,29 @@ function App() {
     );
   }
 
+  // Show activity page
+  if (currentPage === 'activity') {
+    return (
+      <ActivityPage
+        onCancel={() => {
+          setCurrentPage('dashboard');
+          window.history.pushState({ page: 'dashboard' }, '', '/');
+        }}
+        apps={apps}
+        message={message}
+        showMessage={showMessage}
+      />
+    );
+  }
+
   const handleSettingsClick = () => {
     setCurrentPage('settings');
     window.history.pushState({ page: 'settings' }, '', '/settings');
+  };
+
+  const handleActivityClick = () => {
+    setCurrentPage('activity');
+    window.history.pushState({ page: 'activity' }, '', '/activity');
   };
 
   return (
@@ -595,9 +617,12 @@ function App() {
         </div>
       )}
 
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
         <button className="btn btn-primary" onClick={handleAddApp}>
           + Add App
+        </button>
+        <button className="btn btn-secondary" onClick={handleActivityClick}>
+          📋 Activity
         </button>
       </div>
 
@@ -2189,6 +2214,283 @@ function OnboardingPage({ onSetup, message, showMessage }) {
           </form>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ActivityPage({ onCancel, apps, message, showMessage }) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    event_type: '',
+    app_id: '',
+    status: '',
+    search: ''
+  });
+
+  useEffect(() => {
+    loadHistory();
+    document.title = 'Activity - App Watch';
+    return () => {
+      document.title = 'App Watch';
+    };
+  }, []);
+
+  const loadHistory = async (filterParams = {}) => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      params.append('limit', '200');
+      
+      if (filterParams.event_type || filters.event_type) {
+        params.append('event_type', filterParams.event_type || filters.event_type);
+      }
+      if (filterParams.app_id || filters.app_id) {
+        params.append('app_id', filterParams.app_id || filters.app_id);
+      }
+      if (filterParams.status || filters.status) {
+        params.append('status', filterParams.status || filters.status);
+      }
+
+      const response = await fetch(`${API_BASE}/api/history?${params.toString()}`, {
+        headers: getAuthHeaders()
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setHistory(data.history || []);
+      } else {
+        showMessage('Failed to load activity history', 'error');
+      }
+    } catch (error) {
+      showMessage('Error loading activity history: ' + error.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFilterChange = (name, value) => {
+    const newFilters = { ...filters, [name]: value };
+    setFilters(newFilters);
+    loadHistory(newFilters);
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'success':
+        return '✓';
+      case 'error':
+        return '✗';
+      case 'warning':
+        return '⚠';
+      default:
+        return 'ℹ';
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'success':
+        return '#28a745';
+      case 'error':
+        return '#dc3545';
+      case 'warning':
+        return '#ffc107';
+      default:
+        return '#17a2b8';
+    }
+  };
+
+  const getEventTypeLabel = (eventType) => {
+    const labels = {
+      'check': 'Check',
+      'post': 'Post',
+      'app_created': 'App Created',
+      'app_updated': 'App Updated',
+      'app_deleted': 'App Deleted',
+      'app_enabled': 'App Enabled',
+      'app_disabled': 'App Disabled',
+      'settings_updated': 'Settings Updated'
+    };
+    return labels[eventType] || eventType;
+  };
+
+  const filteredHistory = history.filter(entry => {
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      return (
+        entry.message?.toLowerCase().includes(searchLower) ||
+        entry.app_name?.toLowerCase().includes(searchLower) ||
+        entry.event_type?.toLowerCase().includes(searchLower)
+      );
+    }
+    return true;
+  });
+
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="loading">Loading activity history...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h1>Activity History</h1>
+        <button className="btn btn-secondary" onClick={onCancel}>
+          ← Back to Dashboard
+        </button>
+      </div>
+
+      {message && (
+        <div className={message.type === 'error' ? 'error' : 'success'}>
+          {message.text}
+        </div>
+      )}
+
+      {/* Filters */}
+      <div style={{ 
+        background: '#f8f9fa', 
+        padding: '20px', 
+        borderRadius: '8px', 
+        marginBottom: '20px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '15px'
+      }}>
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>Event Type</label>
+          <select
+            value={filters.event_type}
+            onChange={(e) => handleFilterChange('event_type', e.target.value)}
+            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+          >
+            <option value="">All Events</option>
+            <option value="check">Check</option>
+            <option value="post">Post</option>
+            <option value="app_created">App Created</option>
+            <option value="app_updated">App Updated</option>
+            <option value="app_deleted">App Deleted</option>
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>App</label>
+          <select
+            value={filters.app_id}
+            onChange={(e) => handleFilterChange('app_id', e.target.value)}
+            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+          >
+            <option value="">All Apps</option>
+            {apps.map(app => (
+              <option key={app.id} value={app.id}>{app.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>Status</label>
+          <select
+            value={filters.status}
+            onChange={(e) => handleFilterChange('status', e.target.value)}
+            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+          >
+            <option value="">All Status</option>
+            <option value="success">Success</option>
+            <option value="error">Error</option>
+            <option value="warning">Warning</option>
+            <option value="info">Info</option>
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>Search</label>
+          <input
+            type="text"
+            value={filters.search}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            placeholder="Search messages..."
+            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+          />
+        </div>
+      </div>
+
+      {/* History Table */}
+      {filteredHistory.length === 0 ? (
+        <div className="empty-state">
+          <h3>No activity found</h3>
+          <p>Activity history will appear here as you use the application</p>
+        </div>
+      ) : (
+        <div style={{ 
+          background: 'white', 
+          borderRadius: '8px', 
+          overflow: 'hidden',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Time</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Event</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>App</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Status</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredHistory.map((entry) => (
+                <tr 
+                  key={entry.id} 
+                  style={{ 
+                    borderBottom: '1px solid #dee2e6',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f8f9fa'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                >
+                  <td style={{ padding: '12px', fontSize: '14px', color: '#666' }}>
+                    {new Date(entry.timestamp).toLocaleString()}
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <span style={{ 
+                      display: 'inline-block',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      background: '#e9ecef',
+                      fontSize: '12px',
+                      fontWeight: '500'
+                    }}>
+                      {getEventTypeLabel(entry.event_type)}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {entry.app_name || '-'}
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <span style={{ 
+                      display: 'inline-block',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      background: getStatusColor(entry.status) + '20',
+                      color: getStatusColor(entry.status),
+                      fontSize: '12px',
+                      fontWeight: '500'
+                    }}>
+                      {getStatusIcon(entry.status)} {entry.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {entry.message}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

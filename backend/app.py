@@ -222,10 +222,55 @@ def check_app(app_id):
         if not app.get('enabled', True):
             return {'message': 'App is disabled'}, 200
         
+        app_name = app.get('name', 'Unknown')
         result = monitor.check_app(app)
+        
+        # Log check result
+        if result.get('success'):
+            if result.get('current_version') and result.get('last_version') and result.get('current_version') != result.get('last_version'):
+                # New version detected
+                storage.add_history_entry(
+                    event_type='check',
+                    app_id=app_id,
+                    app_name=app_name,
+                    status='success',
+                    message=f'New version detected: {result.get("current_version")}',
+                    details={'version': result.get('current_version'), 'previous_version': result.get('last_version')}
+                )
+            else:
+                # No update
+                storage.add_history_entry(
+                    event_type='check',
+                    app_id=app_id,
+                    app_name=app_name,
+                    status='info',
+                    message='No new version available',
+                    details={'version': result.get('current_version')}
+                )
+        else:
+            # Check failed
+            storage.add_history_entry(
+                event_type='check',
+                app_id=app_id,
+                app_name=app_name,
+                status='error',
+                message=f'Check failed: {result.get("error", "Unknown error")}',
+                details={'error': result.get('error')}
+            )
+        
         return result, 200
     except Exception as e:
         logger.error(f"Error checking app {app_id}: {e}", exc_info=True)
+        app = storage.get_app(app_id) if app_id else None
+        app_name = app.get('name', 'Unknown') if app else 'Unknown'
+        storage.add_history_entry(
+            event_type='check',
+            app_id=app_id,
+            app_name=app_name,
+            status='error',
+            message=f'Check error: {str(e)}',
+            details={'error': str(e)}
+        )
         return {'error': str(e)}, 500
 
 
@@ -236,10 +281,42 @@ def post_to_discord(app_id):
         if not app:
             return {'error': 'App not found'}, 404
         
+        app_name = app.get('name', 'Unknown')
         result = monitor.post_to_discord(app)
+        
+        # Log post result
+        if result.get('success'):
+            storage.add_history_entry(
+                event_type='post',
+                app_id=app_id,
+                app_name=app_name,
+                status='success',
+                message=result.get('message', 'Posted successfully'),
+                details={'version': result.get('version'), 'message': result.get('message')}
+            )
+        else:
+            storage.add_history_entry(
+                event_type='post',
+                app_id=app_id,
+                app_name=app_name,
+                status='error',
+                message=f'Post failed: {result.get("error", "Unknown error")}',
+                details={'error': result.get('error'), 'version': result.get('version')}
+            )
+        
         return result, 200
     except Exception as e:
         logger.error(f"Error posting to notification destinations for app {app_id}: {e}", exc_info=True)
+        app = storage.get_app(app_id) if app_id else None
+        app_name = app.get('name', 'Unknown') if app else 'Unknown'
+        storage.add_history_entry(
+            event_type='post',
+            app_id=app_id,
+            app_name=app_name,
+            status='error',
+            message=f'Post error: {str(e)}',
+            details={'error': str(e)}
+        )
         return {'error': str(e)}, 500
 
 
@@ -506,9 +583,25 @@ def create_app():
     try:
         app_id = save_app(app_data)
         setup_scheduler()  # Reschedule
+        # Log app creation
+        storage.add_history_entry(
+            event_type='app_created',
+            app_id=app_id,
+            app_name=name,
+            status='success',
+            message=f'App "{name}" created',
+            details={'app_store_id': app_store_id, 'enabled': app_data.get('enabled', True)}
+        )
         return jsonify({'id': app_id, **app_data}), 201
     except Exception as e:
         logger.error(f"Error creating app: {e}", exc_info=True)
+        storage.add_history_entry(
+            event_type='app_created',
+            app_name=name,
+            status='error',
+            message=f'Failed to create app "{name}"',
+            details={'error': str(e)}
+        )
         return jsonify({'error': 'Failed to create app'}), 500
 
 
@@ -587,11 +680,30 @@ def update_app(app_id):
             logger.warning(f"Could not fetch icon for app {app['app_store_id']}: {e}")
     
     try:
+        app_name = app.get('name', 'Unknown')
         save_app(app)
         setup_scheduler()  # Reschedule
+        # Log app update
+        storage.add_history_entry(
+            event_type='app_updated',
+            app_id=app_id,
+            app_name=app_name,
+            status='success',
+            message=f'App "{app_name}" updated',
+            details={'enabled': app.get('enabled', True)}
+        )
         return jsonify(app)
     except Exception as e:
         logger.error(f"Error updating app {app_id}: {e}", exc_info=True)
+        app_name = app.get('name', 'Unknown') if 'app' in locals() else 'Unknown'
+        storage.add_history_entry(
+            event_type='app_updated',
+            app_id=app_id,
+            app_name=app_name,
+            status='error',
+            message=f'Failed to update app "{app_name}"',
+            details={'error': str(e)}
+        )
         return jsonify({'error': 'Failed to update app'}), 500
 
 
@@ -599,8 +711,19 @@ def update_app(app_id):
 @require_auth(storage)
 def remove_app(app_id):
     """Delete an app"""
+    app = storage.get_app(app_id)
+    app_name = app.get('name', 'Unknown') if app else 'Unknown'
+    
     if delete_app(app_id):
         setup_scheduler()  # Reschedule
+        # Log app deletion
+        storage.add_history_entry(
+            event_type='app_deleted',
+            app_id=app_id,
+            app_name=app_name,
+            status='success',
+            message=f'App "{app_name}" deleted'
+        )
         return jsonify({'message': 'App deleted'}), 200
     else:
         return jsonify({'error': 'App not found'}), 404
@@ -649,6 +772,41 @@ def get_logs():
     """Get recent logs (simplified - in production use proper log aggregation)"""
     # For now, return empty. In production, you'd read from log files
     return jsonify({'logs': []})
+
+
+@app.route('/api/history', methods=['GET'])
+@require_auth(storage)
+def get_history():
+    """Get activity history with optional filtering"""
+    try:
+        # Get query parameters
+        limit = request.args.get('limit', default=100, type=int)
+        event_type = request.args.get('event_type', default=None, type=str)
+        app_id = request.args.get('app_id', default=None, type=str)
+        status = request.args.get('status', default=None, type=str)
+        start_date = request.args.get('start_date', default=None, type=str)
+        end_date = request.args.get('end_date', default=None, type=str)
+        
+        # Validate limit
+        if limit < 1 or limit > 1000:
+            limit = 100
+        
+        history = storage.get_history(
+            limit=limit,
+            event_type=event_type,
+            app_id=app_id,
+            status=status,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        return jsonify({
+            'history': history,
+            'count': len(history)
+        })
+    except Exception as e:
+        logger.error(f"Error getting history: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to get history'}), 500
 
 
 @app.route('/api/settings', methods=['GET'])
