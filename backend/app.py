@@ -300,6 +300,17 @@ def create_app():
         'enabled': data.get('enabled', True)
     }
     
+    # Try to fetch and save icon URL if not provided
+    if 'icon_url' not in data or not data.get('icon_url'):
+        try:
+            app_info = monitor.fetch_app_info(app_store_id)
+            if app_info and app_info.get('artworkUrl'):
+                app_data['icon_url'] = app_info['artworkUrl']
+        except Exception as e:
+            logger.warning(f"Could not fetch icon for app {app_store_id}: {e}")
+    else:
+        app_data['icon_url'] = data.get('icon_url')
+    
     try:
         app_id = save_app(app_data)
         setup_scheduler()  # Reschedule
@@ -376,6 +387,18 @@ def update_app(app_id):
     if 'enabled' in data:
         app['enabled'] = bool(data['enabled'])
     
+    # Handle icon URL update
+    if 'icon_url' in data:
+        app['icon_url'] = data['icon_url']
+    elif 'app_store_id' in data:
+        # If app_store_id changed, try to fetch new icon
+        try:
+            app_info = monitor.fetch_app_info(app['app_store_id'])
+            if app_info and app_info.get('artworkUrl'):
+                app['icon_url'] = app_info['artworkUrl']
+        except Exception as e:
+            logger.warning(f"Could not fetch icon for app {app['app_store_id']}: {e}")
+    
     try:
         save_app(app)
         setup_scheduler()  # Reschedule
@@ -407,6 +430,26 @@ def post_app_endpoint(app_id):
     """Manually post release notes to Discord"""
     result, status_code = post_to_discord(app_id)
     return jsonify(result), status_code
+
+
+@app.route('/api/apps/metadata/<app_store_id>', methods=['GET'])
+def get_app_metadata(app_store_id):
+    """Fetch app metadata from App Store including icon"""
+    try:
+        app_info = monitor.fetch_app_info(app_store_id)
+        if not app_info:
+            return jsonify({'error': 'App not found in App Store'}), 404
+        
+        return jsonify({
+            'trackName': app_info.get('trackName'),
+            'artistName': app_info.get('artistName'),
+            'artworkUrl': app_info.get('artworkUrl'),
+            'version': app_info.get('version'),
+            'bundleId': app_info.get('bundleId')
+        })
+    except Exception as e:
+        logger.error(f"Error fetching app metadata: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/logs', methods=['GET'])

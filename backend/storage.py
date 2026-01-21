@@ -152,6 +152,10 @@ class StorageManager:
             'enabled': app_data.get('enabled', True)
         }
         
+        # Save icon URL if provided
+        if 'icon_url' in app_data:
+            save_data['icon_url'] = app_data['icon_url']
+        
         # Handle notification destinations - support both new format and legacy webhook_url
         if 'notification_destinations' in app_data and app_data['notification_destinations']:
             save_data['notification_destinations'] = app_data['notification_destinations']

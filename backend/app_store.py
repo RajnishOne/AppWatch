@@ -36,12 +36,21 @@ class AppStoreMonitor:
             
             app_info = data['results'][0]
             
+            # Get artwork URL - prefer higher resolution, fallback to lower
+            artwork_url = (
+                app_info.get('artworkUrl512') or 
+                app_info.get('artworkUrl100') or 
+                app_info.get('artworkUrl60') or
+                None
+            )
+            
             return {
                 'version': app_info.get('version'),
                 'releaseNotes': app_info.get('releaseNotes', ''),
                 'bundleId': app_info.get('bundleId'),
                 'trackName': app_info.get('trackName'),
-                'artistName': app_info.get('artistName')
+                'artistName': app_info.get('artistName'),
+                'artworkUrl': artwork_url
             }
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching app info for {app_store_id}: {e}")
@@ -84,6 +93,15 @@ class AppStoreMonitor:
             # Update last check time and current version
             self.storage.update_last_check(app_id, datetime.now().isoformat())
             self.storage.save_current_version(app_id, current_version)
+            
+            # Update app icon URL if available
+            artwork_url = app_info.get('artworkUrl')
+            if artwork_url:
+                # Update icon URL in app data
+                app_data = self.storage.get_app(app_id)
+                if app_data:
+                    app_data['icon_url'] = artwork_url
+                    self.storage.save_app(app_data)
             
             # Check if version changed
             if last_version and current_version == last_version:
