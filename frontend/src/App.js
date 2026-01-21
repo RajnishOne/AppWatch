@@ -26,12 +26,12 @@ function App() {
   const [authStatus, setAuthStatus] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || null);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('auth_token') || null);
 
-  // Check authentication status on mount
+  // Check authentication status on mount - only once
   useEffect(() => {
     checkAuthStatus();
-  }, []);
+  }, []); // Empty dependency array - only run once on mount
 
   const checkAuthStatus = async () => {
     try {
@@ -48,9 +48,16 @@ function App() {
         
         // If auth is configured, check if we have a token
         if (data.enabled) {
-          if (authToken) {
-            // Verify token by making an authenticated request
-            await verifyAuth();
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            // Set authenticated state optimistically (token exists)
+            setIsAuthenticated(true);
+            setAuthToken(token);
+            setAuthLoading(false);
+            // Verify token in background (non-blocking)
+            verifyAuth(token).catch(() => {
+              // If verification fails, we'll handle it in verifyAuth
+            });
           } else {
             setAuthLoading(false);
           }
@@ -69,19 +76,29 @@ function App() {
     }
   };
 
-  const verifyAuth = async () => {
+  const verifyAuth = async (token = null) => {
+    const tokenToVerify = token || authToken || localStorage.getItem('auth_token');
+    if (!tokenToVerify) {
+      setIsAuthenticated(false);
+      setAuthLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE}/api/status`, {
         headers: {
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${tokenToVerify}`
         }
       });
       
       if (response.ok) {
         setIsAuthenticated(true);
-        setAuthLoading(false);
-        loadApps();
-      } else {
+        setAuthToken(tokenToVerify);
+        if (authLoading) {
+          setAuthLoading(false);
+          loadApps();
+        }
+      } else if (response.status === 401) {
         // Token invalid, clear it
         localStorage.removeItem('auth_token');
         setAuthToken(null);
@@ -90,10 +107,8 @@ function App() {
       }
     } catch (error) {
       console.error('Error verifying auth:', error);
-      localStorage.removeItem('auth_token');
-      setAuthToken(null);
-      setIsAuthenticated(false);
-      setAuthLoading(false);
+      // Don't clear token on network errors - might be temporary
+      // Only clear on actual 401 responses
     }
   };
 
@@ -112,6 +127,7 @@ function App() {
         localStorage.setItem('auth_token', data.token);
         setAuthToken(data.token);
         setIsAuthenticated(true);
+        setAuthLoading(false);
         loadApps();
         return { success: true };
       } else {
@@ -127,7 +143,8 @@ function App() {
     localStorage.removeItem('auth_token');
     setAuthToken(null);
     setIsAuthenticated(false);
-    setAuthStatus(null);
+    // Don't clear authStatus - we still need to know if auth is configured
+    // Just mark as not authenticated
   };
 
   const handleAuthSetup = async (authData) => {
@@ -160,11 +177,14 @@ function App() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated || authLoading) {
+    // Only check routes and load apps if authenticated and not loading
+    if (authLoading) {
       return;
     }
     
-    loadApps();
+    if (isAuthenticated) {
+      loadApps();
+    }
     
     // Check initial route
     const checkRoute = () => {
@@ -219,23 +239,28 @@ function App() {
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, []);
+  }, [isAuthenticated, authLoading]); // Only re-run if auth state changes
 
   const loadApps = async () => {
     try {
       setLoading(true);
-      const headers = {};
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
+      const token = authToken || localStorage.getItem('auth_token');
+      const headers = getAuthHeaders();
       
       const response = await fetch(`${API_BASE}/api/apps`, { headers });
       if (response.ok) {
         const data = await response.json();
         setApps(data);
+        // Ensure we're marked as authenticated if we got data
+        if (!isAuthenticated && token) {
+          setIsAuthenticated(true);
+        }
       } else if (response.status === 401) {
         // Unauthorized, clear token and show login
-        handleLogout();
+        localStorage.removeItem('auth_token');
+        setAuthToken(null);
+        setIsAuthenticated(false);
+        setAuthStatus(prev => prev ? { ...prev, enabled: true } : null);
       } else {
         showMessage('Failed to load apps', 'error');
       }
@@ -414,8 +439,8 @@ function App() {
     }
   };
 
-  // Show loading while checking auth
-  if (authLoading) {
+  // Show loading while checking auth (only on initial load)
+  if (authLoading && !authStatus) {
     return (
       <div className="container">
         <div className="loading">Loading...</div>
@@ -435,7 +460,17 @@ function App() {
   }
 
   // Show login if auth is enabled but user is not authenticated
-  if (authStatus && authStatus.enabled && !isAuthenticated) {
+  // Only show if we've finished loading and don't have a token
+  if (authStatus && authStatus.enabled && !isAuthenticated && !authLoading) {
+    const hasToken = localStorage.getItem('auth_token');
+    // If we have a token but aren't authenticated, we're still verifying
+    if (hasToken) {
+      return (
+        <div className="container">
+          <div className="loading">Verifying authentication...</div>
+        </div>
+      );
+    }
     return (
       <LoginPage
         onLogin={handleLogin}
