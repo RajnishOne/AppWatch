@@ -1143,9 +1143,9 @@ function SettingsPage({ onCancel, message, showMessage }) {
                   checked={settings.auto_post_on_update}
                   onChange={handleChange}
                 />
-                <label htmlFor="auto_post_on_update">Auto-Post to Discord on Update</label>
+                <label htmlFor="auto_post_on_update">Auto-Post Notifications on Update</label>
               </div>
-              <small>Automatically post release notes to Discord when a new version is detected (in addition to checking).</small>
+              <small>Automatically send notifications to all configured destinations when a new version is detected (in addition to checking).</small>
             </div>
 
             <div className="form-actions">
