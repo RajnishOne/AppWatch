@@ -237,7 +237,7 @@ function App() {
           <div className="logo">📱</div>
           <div className="header-text">
             <h1>App Release Watcher</h1>
-            <p>Monitor iOS App Store apps for new releases and post to Discord</p>
+            <p>Monitor iOS App Store apps for new releases and Notify</p>
           </div>
         </div>
         <div className="header-right">
@@ -352,14 +352,31 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
           <span className="info-value" style={{ fontSize: '12px', wordBreak: 'break-all' }}>
             {(() => {
               const destinations = app.notification_destinations || [];
-              if (destinations.length === 0 && app.webhook_url) {
+              // Check for legacy webhook_url (must be non-empty string)
+              const hasLegacyWebhook = app.webhook_url && app.webhook_url.trim();
+              
+              if (destinations.length === 0 && !hasLegacyWebhook) {
+                return '✗ Not configured';
+              }
+              
+              if (destinations.length === 0 && hasLegacyWebhook) {
                 // Legacy support
                 return '✓ 1 Discord webhook (legacy)';
               }
-              if (destinations.length === 0) {
+              
+              // Count valid destinations (with webhook URLs)
+              const validDestinations = destinations.filter(d => {
+                if (d.type === 'discord') {
+                  return d.webhook_url && d.webhook_url.trim();
+                }
+                return false;
+              });
+              
+              if (validDestinations.length === 0) {
                 return '✗ Not configured';
               }
-              const discordCount = destinations.filter(d => d.type === 'discord').length;
+              
+              const discordCount = validDestinations.filter(d => d.type === 'discord').length;
               const parts = [];
               if (discordCount > 0) {
                 parts.push(`${discordCount} Discord${discordCount > 1 ? ' webhooks' : ' webhook'}`);
