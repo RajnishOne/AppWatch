@@ -1,16 +1,17 @@
 # App Watch
 
-A self-hosted tool to monitor iOS App Store apps for new releases and automatically notify you in Discord. Features a web interface for easy management of multiple apps.
+A self-hosted tool to monitor iOS App Store apps for new releases and automatically notify you via multiple platforms (Discord, Slack, Telegram, Microsoft Teams, Email, or custom webhooks). Features a web interface for easy management of multiple apps.
 
 ## Features
 
 - 🍎 Monitor multiple iOS App Store apps simultaneously
-- 🔔 Automatic Discord notifications when new versions are detected
-- 📝 Formats release notes for better readability in Discord
+- 🔔 Automatic notifications when new versions are detected (Discord, Slack, Telegram, Teams, Email, or custom webhooks)
+- 📝 Formats release notes for better readability across platforms
 - 🖥️ Web-based interface for configuration and management
 - 🔄 Configurable check intervals per app
 - ⚡ Manual check and post buttons for testing
 - 🚫 Duplicate prevention - tracks last posted version
+- 🔧 Generic settings for reusable webhook configurations (Telegram bot token, SMTP settings)
 
 ## Getting Started
 
@@ -48,16 +49,47 @@ Wait a few seconds for it to start, then open your web browser and go to:
 
 **http://localhost:8192**
 
-### Step 4: Set Up Discord Webhook
+### Step 4: Set Up Notification Destination
 
-Before adding apps, you need a Discord webhook:
+Before adding apps, you need to configure at least one notification destination. The application supports multiple platforms:
 
+**Discord:**
 1. Open your Discord server
 2. Go to **Server Settings** → **Integrations** → **Webhooks**
 3. Click **New Webhook** or **Create Webhook**
 4. Choose the channel where you want notifications
 5. Name it (e.g., "App Releases")
-6. Click **Copy Webhook URL** and save it somewhere
+6. Click **Copy Webhook URL** and save it
+
+**Slack:**
+1. Go to your Slack workspace settings
+2. Navigate to **Apps** → **Incoming Webhooks**
+3. Click **Add to Slack** or **Create Webhook**
+4. Choose the channel and click **Add Incoming Webhooks Integration**
+5. Copy the webhook URL (starts with `https://hooks.slack.com/`)
+
+**Telegram:**
+1. Message [@BotFather](https://t.me/BotFather) on Telegram
+2. Send `/newbot` and follow instructions to create a bot
+3. Copy the bot token (format: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+4. Message [@userinfobot](https://t.me/userinfobot) to get your chat ID
+5. You can set the bot token in Settings for all apps, or per app
+
+**Microsoft Teams:**
+1. Go to your Teams channel
+2. Click **⋯** (More options) → **Connectors**
+3. Search for "Incoming Webhook" and click **Configure**
+4. Name it and click **Create**
+5. Copy the webhook URL
+
+**Email (SMTP):**
+- Configure SMTP settings in Settings page (host, port, username, password)
+- Or configure per app when adding notification destination
+- Common providers: Gmail (smtp.gmail.com:587), Outlook (smtp-mail.outlook.com:587)
+
+**Generic Webhook:**
+- Any HTTP/HTTPS endpoint that accepts POST requests
+- Optionally customize the JSON payload template
 
 ### Step 5: Find App Store ID
 
@@ -73,32 +105,39 @@ Before adding apps, you need a Discord webhook:
 2. Fill in:
    - **App Name**: Any name you want (e.g., "My App")
    - **App Store ID**: The number you found in Step 5
-   - **Notification Destination**: Select "Discord"
-   - **Discord Webhook URL**: Paste the webhook URL from Step 4
+   - **Notification Destination**: Select your preferred platform (Discord, Slack, Telegram, Teams, Email, or Generic)
+   - **Configure the destination**: Enter the required information based on your selected platform:
+     - **Discord/Slack/Teams/Generic**: Paste the webhook URL
+     - **Telegram**: Enter bot token (or use from Settings) and chat ID
+     - **Email**: Enter recipient email and SMTP settings (or use from Settings)
    - **Check Interval** (optional): Leave empty for default (12 hours), or use `6h`, `1d`, etc.
 3. Click **"Save"**
+
+**Note:** You can add multiple notification destinations per app. Just add another destination in the same form.
 
 ### Step 7: Test It
 
 1. Click **"Check Now"** to see if it finds the current version
-2. Click **"Post Now"** to send a test message to Discord
+2. Click **"Post Now"** to send a test message to all configured notification destinations
 3. If everything works, the app will check for updates automatically
 
-You can add more apps by clicking **"Add App"** again. Each app can use a different Discord channel.
+You can add more apps by clicking **"Add App"** again. Each app can use different notification destinations and channels.
 
 ## How It Works
 
-The application periodically checks the App Store API for new versions of your configured apps. When a new version is detected, it automatically formats the release notes and posts them to your Discord channel via webhook.
+The application periodically checks the App Store API for new versions of your configured apps. When a new version is detected, it automatically formats the release notes and sends notifications to all configured destinations (Discord, Slack, Telegram, Teams, Email, or custom webhooks).
 
 - **Default check interval**: Every 12 hours (configurable per app)
 - **Custom intervals**: Set different check frequencies per app (e.g., `6h` for 6 hours, `1d` for daily)
 - **Manual checks**: Use the "Check Now" button to trigger an immediate check
+- **Multiple destinations**: Configure multiple notification channels per app (e.g., Discord + Email)
 - **Duplicate prevention**: Tracks the last posted version to avoid sending the same update multiple times
 - **Version tracking**: Stores version history locally in the data directory
+- **Generic settings**: Set reusable configurations (Telegram bot token, SMTP settings) in Settings page
 
 ## Release Notes Formatting
 
-The application automatically formats release notes from the App Store for better readability in Discord. It detects structured sections and formats them accordingly.
+The application automatically formats release notes from the App Store for better readability across all platforms. It detects structured sections and formats them appropriately for each notification type (Discord, Slack, Telegram, Teams, Email, etc.).
 
 ### Example: Structured Release Notes
 
@@ -117,7 +156,7 @@ Fixed:
 - Memory leak issue
 ```
 
-**Formatted output in Discord:**
+**Formatted output (Discord/other platforms):**
 ```
 # v2.3.1
 
@@ -136,7 +175,7 @@ Fixed:
 
 ### Section Headers That Become Bold
 
-The formatter automatically detects and makes these section headers **bold** (as `##` headers in Discord):
+The formatter automatically detects and formats these section headers appropriately for each platform:
 
 - **New** (or "new:")
 - **Added** (or "added:")
@@ -154,7 +193,7 @@ This release includes bug fixes and performance improvements.
 We've also added support for iOS 17.
 ```
 
-**Formatted output in Discord:**
+**Formatted output (Discord/other platforms):**
 ```
 # v2.3.1
 
@@ -234,7 +273,8 @@ docker compose up -d
 
 All your app configurations and version tracking data are stored in the `data` folder in the same directory as your `docker-compose.yml` file:
 
-- `data/apps.json` - App configurations (names, IDs, webhooks, intervals)
+- `data/apps.json` - App configurations (names, IDs, notification destinations, intervals)
+- `data/settings.json` - Global settings (default interval, Telegram bot token, SMTP settings)
 - `data/apps/<APP_ID>/version.txt` - Last posted version for each app
 - `data/apps/<APP_ID>/check.txt` - Last check timestamp for each app
 
@@ -427,9 +467,22 @@ Each app can be configured individually through the web interface:
 
 - **App Name**: Display name for easy identification
 - **App Store ID**: Unique identifier from the App Store URL
-- **Discord Webhook URL**: Where notifications will be posted
+- **Notification Destinations**: One or more notification channels (Discord, Slack, Telegram, Teams, Email, or Generic webhook)
+  - Each destination can be configured with its specific settings
+  - You can add multiple destinations of the same or different types
 - **Check Interval**: Override the default interval (e.g., `6h`, `30m`, `1d`)
 - **Enabled**: Toggle to enable/disable monitoring for specific apps
+
+### Global Settings
+
+Configure reusable settings in the Settings page:
+
+- **Default Check Interval**: Default interval for all apps (unless overridden)
+- **Monitoring Enabled by Default**: Whether new apps start enabled
+- **Auto-Post on Update**: Automatically send notifications when updates are detected
+- **Telegram Bot Token**: Default bot token for all Telegram notifications (can be overridden per app)
+- **SMTP Settings**: Default email server settings (host, port, username, password, from address, TLS)
+  - These can be used for all email notifications or overridden per app
 
 ## Troubleshooting
 
@@ -450,10 +503,14 @@ Each app can be configured individually through the web interface:
 - Verify Docker Desktop (or Docker daemon) is running
 - Check Docker status: `docker ps`
 
-### Discord Notifications Not Working
+### Notifications Not Working
 
-**Webhook URL issues:**
-- Verify the webhook URL is correct and starts with `https://discord.com/api/webhooks/`
+**Discord/Slack/Teams/Generic Webhook issues:**
+- Verify the webhook URL is correct:
+  - Discord: Must start with `https://discord.com/api/webhooks/`
+  - Slack: Must start with `https://hooks.slack.com/`
+  - Teams: Must be a valid HTTPS URL
+  - Generic: Must start with `http://` or `https://`
 - Ensure you copied the entire URL without any extra spaces or characters
 - Test the webhook manually using curl:
   ```bash
@@ -463,14 +520,28 @@ Each app can be configured individually through the web interface:
   ```
 
 **Webhook deleted or invalid:**
-- If you deleted the webhook in Discord, create a new one and update the app configuration
+- If you deleted the webhook, create a new one and update the app configuration
 - Check that the webhook has permission to post in the selected channel
-- Verify the webhook is still active in Discord server settings
+- Verify the webhook is still active in the platform's settings
+
+**Telegram issues:**
+- Verify the bot token is correct (format: `123456789:ABCdef...`)
+- Check that the chat ID is correct (get it from @userinfobot)
+- Ensure the bot token is set either in Settings or per app
+- Make sure you've started a conversation with your bot first
+
+**Email (SMTP) issues:**
+- Verify SMTP settings are correct (host, port, username, password)
+- For Gmail, use an App Password instead of your regular password
+- Check that SMTP settings are set either in Settings or per app
+- Verify the recipient email address is correct
+- Test SMTP connection manually if needed
 
 **No notifications received:**
 - Use the "Post Now" button to test manually
 - Check the container logs for errors: `docker logs app-watch`
 - Verify the app is enabled in the web interface
+- Check that at least one notification destination is properly configured
 
 ### App Not Detecting Updates
 
@@ -496,6 +567,26 @@ Each app can be configured individually through the web interface:
 - Ensure there are no spaces or extra characters
 - If using an old webhook URL with `discordapp.com`, update it to `discord.com`
 
+**"Invalid Slack webhook URL"**
+- The URL must start with `https://hooks.slack.com/`
+- Ensure you copied the complete webhook URL from Slack
+
+**"Telegram bot token is required"**
+- Set the bot token in Settings page, or provide it when configuring the app
+- Get the token from @BotFather on Telegram
+
+**"Telegram chat ID is required"**
+- Get your chat ID from @userinfobot on Telegram
+- Or extract it from Telegram message updates
+
+**"SMTP host is required"**
+- Set SMTP host in Settings page, or provide it when configuring email destination
+- Common values: `smtp.gmail.com`, `smtp-mail.outlook.com`
+
+**"Invalid webhook URL"**
+- For generic webhooks, ensure the URL starts with `http://` or `https://`
+- Verify the endpoint accepts POST requests with JSON payload
+
 **"App Store ID must be a number"**
 - Only use the numeric ID from the App Store URL
 - Example: For `https://apps.apple.com/app/id123456789`, use `123456789`
@@ -515,7 +606,9 @@ The application provides a REST API for programmatic access:
 - `PUT /api/apps/:id` - Update an existing app
 - `DELETE /api/apps/:id` - Delete an app configuration
 - `POST /api/apps/:id/check` - Manually trigger a check for updates
-- `POST /api/apps/:id/post` - Manually post current version to Discord
+- `POST /api/apps/:id/post` - Manually post current version to all configured notification destinations
+- `GET /api/settings` - Get application settings
+- `PUT /api/settings` - Update application settings
 - `GET /api/status` - Health check endpoint
 
 ## Technical Details
