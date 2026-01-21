@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build script for App Store Watcher
+# Build script for App Watch
 
 echo "Building frontend..."
 cd frontend

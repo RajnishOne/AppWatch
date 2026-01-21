@@ -1,5 +1,5 @@
 @echo off
-REM Build script for App Store Watcher (Windows)
+REM Build script for App Watch (Windows)
 
 echo Building frontend...
 cd frontend

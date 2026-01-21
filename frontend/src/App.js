@@ -291,7 +291,7 @@ function App() {
         <div className="header-left">
           <div className="logo">📱</div>
           <div className="header-text">
-            <h1>App Release Watcher</h1>
+            <h1>App Watch</h1>
             <p>Monitor iOS App Store apps for new releases and Notify</p>
           </div>
         </div>
@@ -553,7 +553,7 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
   
   useEffect(() => {
     // Update document title
-    document.title = editingApp ? 'Edit App - App Release Watcher' : 'Add New App - App Release Watcher';
+    document.title = editingApp ? 'Edit App - App Watch' : 'Add New App - App Watch';
     
     // Load default monitoring setting only if not editing
     if (!editingApp) {
@@ -576,7 +576,7 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
     }
     
     return () => {
-      document.title = 'App Release Watcher';
+      document.title = 'App Watch';
     };
   }, [editingApp]);
 
@@ -973,9 +973,9 @@ function SettingsPage({ onCancel, message, showMessage }) {
 
   useEffect(() => {
     loadSettings();
-    document.title = 'Settings - App Release Watcher';
+    document.title = 'Settings - App Watch';
     return () => {
-      document.title = 'App Release Watcher';
+      document.title = 'App Watch';
     };
   }, []);
 

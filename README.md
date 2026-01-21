@@ -1,4 +1,4 @@
-# App Store Release Watcher
+# App Watch
 
 A self-hosted tool to monitor iOS App Store apps for new releases and automatically notify you in Discord. Features a web interface for easy management of multiple apps.
 
@@ -311,7 +311,7 @@ services:
     
     # Labels (optional)
     labels:
-      - "com.example.description=App Store Release Watcher"
+      - "com.example.description=App Watch"
       - "com.example.version=1.0"
     
     # User and permissions (optional)

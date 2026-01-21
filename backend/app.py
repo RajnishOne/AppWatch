@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-App Store Release Notifier - Main Application
+App Watch - Main Application
 """
 import os
 import json
