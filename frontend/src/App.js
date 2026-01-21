@@ -7,7 +7,7 @@ function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard' or 'add-app'
+  const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard', 'add-app', or 'settings'
   const [editingApp, setEditingApp] = useState(null);
   const [message, setMessage] = useState(null);
   const [checking, setChecking] = useState({});
@@ -21,6 +21,8 @@ function App() {
       const path = window.location.pathname;
       if (path === '/add-app' || path.includes('/add-app')) {
         setCurrentPage('add-app');
+      } else if (path === '/settings' || path.includes('/settings')) {
+        setCurrentPage('settings');
       } else {
         setCurrentPage('dashboard');
       }
@@ -209,11 +211,43 @@ function App() {
     );
   }
 
+  // Show settings page
+  if (currentPage === 'settings') {
+    return (
+      <SettingsPage
+        onCancel={() => {
+          setCurrentPage('dashboard');
+          window.history.pushState({ page: 'dashboard' }, '', '/');
+        }}
+        message={message}
+        showMessage={showMessage}
+      />
+    );
+  }
+
+  const handleSettingsClick = () => {
+    setCurrentPage('settings');
+    window.history.pushState({ page: 'settings' }, '', '/settings');
+  };
+
   return (
     <div className="container">
       <div className="header">
-        <h1>App Release Watcher</h1>
-        <p>Monitor iOS App Store apps for new releases and post to Discord</p>
+        <div className="header-left">
+          <div className="logo">📱</div>
+          <div className="header-text">
+            <h1>App Release Watcher</h1>
+            <p>Monitor iOS App Store apps for new releases and post to Discord</p>
+          </div>
+        </div>
+        <div className="header-right">
+          <button className="settings-icon-btn" onClick={handleSettingsClick} aria-label="Settings">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3m15.364 6.364l-4.243-4.243m-4.242 0L5.636 17.364m12.728 0l-4.243-4.243m-4.242 0L5.636 6.636"></path>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -389,6 +423,25 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
   useEffect(() => {
     // Update document title
     document.title = 'Add New App - App Release Watcher';
+    
+    // Load default monitoring setting
+    const loadDefaultSettings = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/settings`);
+        if (response.ok) {
+          const settings = await response.json();
+          setFormData(prev => ({
+            ...prev,
+            enabled: settings.monitoring_enabled_by_default !== false
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    };
+    
+    loadDefaultSettings();
+    
     return () => {
       document.title = 'App Release Watcher';
     };
@@ -741,6 +794,211 @@ function AppModal({ app, onClose, onSave }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPage({ onCancel, message, showMessage }) {
+  const [settings, setSettings] = useState({
+    default_interval: '12h',
+    monitoring_enabled_by_default: true,
+    auto_post_on_update: false
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    loadSettings();
+    document.title = 'Settings - App Release Watcher';
+    return () => {
+      document.title = 'App Release Watcher';
+    };
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/api/settings`);
+      if (response.ok) {
+        const data = await response.json();
+        setSettings(data);
+      } else {
+        showMessage('Failed to load settings', 'error');
+      }
+    } catch (error) {
+      showMessage('Error loading settings: ' + error.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validateInterval = (interval) => {
+    if (!interval || !interval.trim()) {
+      return 'Interval is required';
+    }
+    const intervalRegex = /^\d+[hmsd]$/i;
+    if (!intervalRegex.test(interval.trim())) {
+      return 'Invalid interval format. Use format like: 6h, 30m, 1d';
+    }
+    return null;
+  };
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    const newValue = type === 'checkbox' ? checked : value;
+    
+    setSettings(prev => ({
+      ...prev,
+      [name]: newValue
+    }));
+
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validate
+    const newErrors = {};
+    const intervalError = validateInterval(settings.default_interval);
+    if (intervalError) {
+      newErrors.default_interval = intervalError;
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      showMessage('Please fix the errors before saving', 'error');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await fetch(`${API_BASE}/api/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+      });
+
+      if (response.ok) {
+        showMessage('Settings saved successfully');
+      } else {
+        const data = await response.json();
+        showMessage(data.error || 'Failed to save settings', 'error');
+      }
+    } catch (error) {
+      showMessage('Error saving settings: ' + error.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="loading">Loading settings...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-page-wrapper">
+      <div className="settings-header">
+        <button className="close-button" onClick={onCancel} aria-label="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+        <h1>Settings</h1>
+      </div>
+
+      <div className="settings-content">
+        <div className="settings-form-section">
+          {message && (
+            <div className={`message-banner ${message.type === 'error' ? 'error' : 'success'}`}>
+              {message.text}
+            </div>
+          )}
+
+          <div className="form-prompt">
+            <h2>Configure Application Settings</h2>
+            <p className="form-subtitle">Customize default behavior for monitoring apps</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="settings-form">
+            <div className="form-group">
+              <label htmlFor="default_interval">Default Check Interval (*)</label>
+              <input
+                type="text"
+                id="default_interval"
+                name="default_interval"
+                value={settings.default_interval}
+                onChange={handleChange}
+                placeholder="12h"
+                className={errors.default_interval ? 'error-input' : ''}
+              />
+              {errors.default_interval && <span className="error-text">{errors.default_interval}</span>}
+              <small>Default interval for checking app updates (e.g., 6h, 30m, 1d). This applies to new apps unless overridden.</small>
+            </div>
+
+            <div className="form-group">
+              <div className="checkbox-group">
+                <input
+                  type="checkbox"
+                  id="monitoring_enabled_by_default"
+                  name="monitoring_enabled_by_default"
+                  checked={settings.monitoring_enabled_by_default}
+                  onChange={handleChange}
+                />
+                <label htmlFor="monitoring_enabled_by_default">Enable Monitoring by Default</label>
+              </div>
+              <small>When enabled, new apps will have monitoring turned on automatically.</small>
+            </div>
+
+            <div className="form-group">
+              <div className="checkbox-group">
+                <input
+                  type="checkbox"
+                  id="auto_post_on_update"
+                  name="auto_post_on_update"
+                  checked={settings.auto_post_on_update}
+                  onChange={handleChange}
+                />
+                <label htmlFor="auto_post_on_update">Auto-Post to Discord on Update</label>
+              </div>
+              <small>Automatically post release notes to Discord when a new version is detected (in addition to checking).</small>
+            </div>
+
+            <div className="form-actions">
+              <button 
+                type="submit" 
+                className="btn btn-primary btn-large"
+                disabled={saving || Object.keys(errors).length > 0}
+              >
+                {saving ? 'Saving...' : 'Save Settings'}
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-secondary btn-large"
+                onClick={onCancel}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

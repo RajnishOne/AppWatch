@@ -18,12 +18,61 @@ class StorageManager:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
         self.apps_file = self.data_dir / 'apps.json'
+        self.settings_file = self.data_dir / 'settings.json'
         self._ensure_apps_file()
+        self._ensure_settings_file()
     
     def _ensure_apps_file(self):
         """Ensure apps.json exists"""
         if not self.apps_file.exists():
             self._save_apps({})
+    
+    def _ensure_settings_file(self):
+        """Ensure settings.json exists"""
+        if not self.settings_file.exists():
+            default_settings = {
+                'default_interval': '12h',
+                'monitoring_enabled_by_default': True,
+                'auto_post_on_update': False
+            }
+            self._save_settings(default_settings)
+    
+    def _load_settings(self):
+        """Load settings from JSON file"""
+        try:
+            if self.settings_file.exists():
+                with open(self.settings_file, 'r') as f:
+                    return json.load(f)
+            return {}
+        except Exception as e:
+            logger.error(f"Error loading settings: {e}")
+            return {}
+    
+    def _save_settings(self, settings_dict):
+        """Save settings to JSON file"""
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(settings_dict, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving settings: {e}")
+            raise
+    
+    def get_settings(self):
+        """Get all settings with defaults"""
+        settings = self._load_settings()
+        # Ensure defaults are always present
+        defaults = {
+            'default_interval': '12h',
+            'monitoring_enabled_by_default': True,
+            'auto_post_on_update': False
+        }
+        # Merge defaults with loaded settings (loaded settings take precedence)
+        return {**defaults, **settings}
+    
+    def save_settings(self, settings_data):
+        """Save settings"""
+        self._save_settings(settings_data)
+        return True
     
     def _load_apps(self):
         """Load apps from JSON file"""

@@ -61,8 +61,13 @@ def delete_app(app_id):
 
 
 def get_default_interval():
-    """Get default check interval from environment"""
-    interval_str = os.getenv('CHECK_INTERVAL', '12h')
+    """Get default check interval from settings or environment"""
+    try:
+        settings = storage.get_settings()
+        interval_str = settings.get('default_interval', os.getenv('CHECK_INTERVAL', '12h'))
+    except Exception as e:
+        logger.warning(f"Error reading settings, falling back to environment: {e}")
+        interval_str = os.getenv('CHECK_INTERVAL', '12h')
     return parse_interval(interval_str)
 
 
@@ -358,6 +363,50 @@ def get_logs():
     """Get recent logs (simplified - in production use proper log aggregation)"""
     # For now, return empty. In production, you'd read from log files
     return jsonify({'logs': []})
+
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Get application settings"""
+    try:
+        settings = storage.get_settings()
+        return jsonify(settings)
+    except Exception as e:
+        logger.error(f"Error getting settings: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to get settings'}), 500
+
+
+@app.route('/api/settings', methods=['PUT'])
+def update_settings():
+    """Update application settings"""
+    if not request.json:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    
+    data = request.json
+    
+    # Validate settings
+    if 'default_interval' in data:
+        interval = data['default_interval']
+        if interval:
+            try:
+                parse_interval(interval)
+            except (ValueError, AttributeError):
+                return jsonify({'error': 'Invalid interval format. Use format like: 6h, 30m, 1d'}), 400
+    
+    try:
+        current_settings = storage.get_settings()
+        # Merge with new settings
+        current_settings.update(data)
+        storage.save_settings(current_settings)
+        
+        # Reschedule jobs if interval changed
+        if 'default_interval' in data:
+            setup_scheduler()
+        
+        return jsonify(current_settings)
+    except Exception as e:
+        logger.error(f"Error updating settings: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to update settings'}), 500
 
 
 # Initialize scheduler when module loads
