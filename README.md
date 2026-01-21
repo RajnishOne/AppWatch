@@ -240,30 +240,186 @@ All your app configurations and version tracking data are stored in the `data` f
 
 **Important:** If you delete the `data` folder, you'll lose all your app configurations and version tracking.
 
-### Environment Variables
+### Docker Compose Configuration
 
-You can customize the application behavior using environment variables in your `docker-compose.yml`:
+The `docker-compose.yml` file supports many configuration options. Here's a comprehensive example with all possible values:
 
 ```yaml
 services:
   app-watch:
-    image: rajnishdock/app-watch:latest
-    container_name: app-watch
-    restart: unless-stopped
+    # Image configuration
+    image: rajnishdock/app-watch:latest        # Docker image to use
+    container_name: app-watch                  # Custom container name (optional)
+    
+    # Restart policy
+    restart: unless-stopped                    # Options: no, always, on-failure, unless-stopped
+    
+    # Port mapping (host:container)
     ports:
-      - "8192:8192"
+      - "8192:8192"                            # Format: "HOST_PORT:CONTAINER_PORT"
+      # Alternative formats:
+      # - "8192:8192/tcp"                      # Specify protocol
+      # - "127.0.0.1:8192:8192"               # Bind to specific host IP
+    
+    # Volume mounts
     volumes:
-      - ./data:/data
+      - ./data:/data                           # Local path:container path
+      # Alternative formats:
+      # - /docker-data/app-watch/data:/data    # Absolute path
+      # - app-watch-data:/data                 # Named volume (requires volumes: section)
+    
+    # Environment variables
     environment:
-      - CHECK_INTERVAL=12h    # Default check interval (12h, 6h, 1d, etc.)
-      - TZ=America/New_York    # Timezone for logging (optional)
-      - PORT=8192              # Server port (default: 8192)
+      - CHECK_INTERVAL=12h                     # Default check interval (12h, 6h, 1d, 30m, etc.)
+      - PORT=8192                              # Server port (default: 8192)
+      - TZ=America/New_York                    # Timezone (optional, e.g., UTC, Europe/London)
+      - APP_VERSION=1.0.0                      # App version override (optional)
+    # Alternative: use env_file
+    # env_file:
+    #   - .env                                  # Load from .env file
+    #   - .env.local                            # Multiple files supported
+    
+    # Networks (optional)
+    networks:
+      - app-watch-network                      # Custom network name
+    # Or use default network
+    
+    # Health check (optional)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8192/api/status"]
+      interval: 30s                            # Check every 30 seconds
+      timeout: 10s                             # Timeout after 10 seconds
+      retries: 3                               # Retry 3 times before marking unhealthy
+      start_period: 40s                        # Grace period on startup
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'                          # CPU limit (1.0 = 1 CPU core)
+          memory: 512M                         # Memory limit
+        reservations:
+          cpus: '0.5'                          # CPU reservation
+          memory: 256M                         # Memory reservation
+    
+    # Logging configuration (optional)
+    logging:
+      driver: "json-file"                      # Options: json-file, syslog, journald, gelf, fluentd, awslogs, splunk, etwlogs, none
+      options:
+        max-size: "10m"                        # Max log file size
+        max-file: "3"                          # Number of log files to keep
+    
+    # Labels (optional)
+    labels:
+      - "com.example.description=App Store Release Watcher"
+      - "com.example.version=1.0"
+    
+    # User and permissions (optional)
+    # user: "1000:1000"                        # Run as specific user:group (UID:GID)
+    
+    # Working directory (optional)
+    # working_dir: /app                        # Override working directory
+    
+    # Command override (optional)
+    # command: ["python", "-m", "backend.app", "--custom-arg"]
+    
+    # Entrypoint override (optional)
+    # entrypoint: ["/custom-entrypoint.sh"]
+    
+    # Security options (optional)
+    # security_opt:
+    #   - no-new-privileges:true
+    
+    # Capabilities (optional)
+    # cap_add:
+    #   - NET_ADMIN
+    # cap_drop:
+    #   - ALL
+    
+    # Shared memory size (optional)
+    # shm_size: '64mb'
+    
+    # Dependencies (optional)
+    # depends_on:
+    #   - database
+    #   - redis
+
+# Named volumes (if using named volumes)
+# volumes:
+#   app-watch-data:
+#     driver: local
+#     # Optional volume options:
+#     # driver_opts:
+#     #   type: none
+#     #   o: bind
+#     #   device: /path/to/data
+
+# Networks (if using custom networks)
+# networks:
+#   app-watch-network:
+#     driver: bridge
+#     # Optional network options:
+#     # ipam:
+#     #   config:
+#     #     - subnet: 172.20.0.0/16
 ```
 
-**Available Variables:**
-- `CHECK_INTERVAL`: Default check interval for apps without custom intervals (format: `12h`, `30m`, `1d`)
-- `TZ`: Timezone for timestamps and logging (default: system timezone)
-- `PORT`: Server port number (default: `8192`)
+#### Environment Variables Reference
+
+| Variable | Description | Default | Format/Examples |
+|----------|-------------|---------|-----------------|
+| `CHECK_INTERVAL` | Default check interval for apps without custom intervals | `12h` | `30m`, `6h`, `12h`, `1d`, `7d` |
+| `PORT` | Server port number | `8192` | Any valid port number (e.g., `3000`, `8080`) |
+| `TZ` | Timezone for timestamps and logging | System timezone | `UTC`, `America/New_York`, `Europe/London`, `Asia/Tokyo` |
+| `APP_VERSION` or `VERSION` | Application version override | Auto-detected | Version string (e.g., `1.0.0`) |
+
+#### Restart Policy Options
+
+- `no`: Do not automatically restart the container (default)
+- `always`: Always restart the container if it stops
+- `on-failure`: Restart the container if it exits due to an error
+- `unless-stopped`: Always restart the container unless it is explicitly stopped
+
+#### Volume Mount Options
+
+- **Bind mount**: `./data:/data` or `/absolute/path:/data` - Maps a host directory to container directory
+- **Named volume**: `app-watch-data:/data` - Uses Docker-managed volume (requires `volumes:` section)
+- **Read-only mount**: `./data:/data:ro` - Mount as read-only
+
+#### Port Mapping Formats
+
+- `"8192:8192"` - Map host port 8192 to container port 8192
+- `"127.0.0.1:8192:8192"` - Bind to specific host IP only
+- `"8192:8192/tcp"` - Specify protocol (tcp/udp)
+- `"8192:8192/udp"` - UDP protocol
+
+#### Health Check Options
+
+The health check verifies the container is running correctly by checking the `/api/status` endpoint. You can customize:
+- `interval`: Time between health checks
+- `timeout`: Maximum time to wait for a response
+- `retries`: Number of consecutive failures before marking unhealthy
+- `start_period`: Grace period on startup before health checks count
+
+#### Resource Limits
+
+Use the `deploy.resources` section to limit container resources:
+- `limits`: Maximum resources the container can use
+- `reservations`: Guaranteed minimum resources
+
+**Note:** The `deploy` section is primarily for Docker Swarm, but some options work with `docker compose`. For standalone Docker Compose, you can also use deprecated but still functional options:
+```yaml
+mem_limit: 512m
+cpus: 1.0
+```
+
+#### Logging Drivers
+
+Common logging driver options:
+- `json-file`: Default, logs to JSON files (supports `max-size` and `max-file` options)
+- `syslog`: Send logs to syslog
+- `journald`: Send logs to systemd journal (Linux only)
+- `none`: Disable logging
 
 ### Per-App Settings
 
