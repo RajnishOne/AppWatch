@@ -244,7 +244,7 @@ def create_app():
     
     data = request.json
     
-    required_fields = ['name', 'app_store_id', 'webhook_url']
+    required_fields = ['name', 'app_store_id']
     for field in required_fields:
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
@@ -252,14 +252,37 @@ def create_app():
     # Input validation
     name = str(data['name']).strip()
     app_store_id = str(data['app_store_id']).strip()
-    webhook_url = str(data['webhook_url']).strip()
     
     if not name:
         return jsonify({'error': 'App name cannot be empty'}), 400
     if not app_store_id or not app_store_id.isdigit():
         return jsonify({'error': 'App Store ID must be a number'}), 400
-    if not webhook_url.startswith('https://discord.com/api/webhooks/'):
-        return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+    
+    # Validate notification destinations if provided
+    notification_destinations = data.get('notification_destinations', [])
+    if not isinstance(notification_destinations, list):
+        return jsonify({'error': 'notification_destinations must be an array'}), 400
+    
+    # Validate each destination
+    for dest in notification_destinations:
+        if not isinstance(dest, dict):
+            return jsonify({'error': 'Each notification destination must be an object'}), 400
+        if 'type' not in dest:
+            return jsonify({'error': 'Each notification destination must have a type'}), 400
+        if dest['type'] == 'discord':
+            webhook_url = dest.get('webhook_url', '').strip()
+            if not webhook_url:
+                return jsonify({'error': 'Discord destination requires webhook_url'}), 400
+            if not webhook_url.startswith('https://discord.com/api/webhooks/'):
+                return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+    
+    # Legacy support - if webhook_url is provided but no notification_destinations, convert it
+    if not notification_destinations and 'webhook_url' in data:
+        webhook_url = str(data['webhook_url']).strip()
+        if webhook_url:
+            if not webhook_url.startswith('https://discord.com/api/webhooks/'):
+                return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+            notification_destinations = [{'type': 'discord', 'webhook_url': webhook_url}]
     
     # Validate interval if provided
     interval_override = data.get('interval_override', '').strip() if data.get('interval_override') else None
@@ -272,7 +295,7 @@ def create_app():
     app_data = {
         'name': name,
         'app_store_id': app_store_id,
-        'webhook_url': webhook_url,
+        'notification_destinations': notification_destinations,
         'interval_override': interval_override,
         'enabled': data.get('enabled', True)
     }
@@ -311,11 +334,34 @@ def update_app(app_id):
             return jsonify({'error': 'App Store ID must be a number'}), 400
         app['app_store_id'] = app_store_id
     
-    if 'webhook_url' in data:
+    # Handle notification destinations
+    if 'notification_destinations' in data:
+        notification_destinations = data['notification_destinations']
+        if not isinstance(notification_destinations, list):
+            return jsonify({'error': 'notification_destinations must be an array'}), 400
+        
+        # Validate each destination
+        for dest in notification_destinations:
+            if not isinstance(dest, dict):
+                return jsonify({'error': 'Each notification destination must be an object'}), 400
+            if 'type' not in dest:
+                return jsonify({'error': 'Each notification destination must have a type'}), 400
+            if dest['type'] == 'discord':
+                webhook_url = dest.get('webhook_url', '').strip()
+                if not webhook_url:
+                    return jsonify({'error': 'Discord destination requires webhook_url'}), 400
+                if not webhook_url.startswith('https://discord.com/api/webhooks/'):
+                    return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+        
+        app['notification_destinations'] = notification_destinations
+    
+    # Legacy support - if webhook_url is provided, convert it
+    elif 'webhook_url' in data:
         webhook_url = str(data['webhook_url']).strip()
-        if not webhook_url.startswith('https://discord.com/api/webhooks/'):
-            return jsonify({'error': 'Invalid Discord webhook URL'}), 400
-        app['webhook_url'] = webhook_url
+        if webhook_url:
+            if not webhook_url.startswith('https://discord.com/api/webhooks/'):
+                return jsonify({'error': 'Invalid Discord webhook URL'}), 400
+            app['notification_destinations'] = [{'type': 'discord', 'webhook_url': webhook_url}]
     
     if 'interval_override' in data:
         interval_override = data['interval_override']

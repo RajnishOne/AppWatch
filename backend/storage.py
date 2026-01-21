@@ -148,10 +148,21 @@ class StorageManager:
         save_data = {
             'name': app_data['name'],
             'app_store_id': app_data['app_store_id'],
-            'webhook_url': app_data['webhook_url'],
             'interval_override': app_data.get('interval_override'),
             'enabled': app_data.get('enabled', True)
         }
+        
+        # Handle notification destinations - support both new format and legacy webhook_url
+        if 'notification_destinations' in app_data and app_data['notification_destinations']:
+            save_data['notification_destinations'] = app_data['notification_destinations']
+        elif 'webhook_url' in app_data and app_data['webhook_url']:
+            # Legacy support - convert old webhook_url to new format
+            save_data['notification_destinations'] = [{
+                'type': 'discord',
+                'webhook_url': app_data['webhook_url']
+            }]
+        else:
+            save_data['notification_destinations'] = []
         
         apps_dict[app_id] = save_data
         self._save_apps(apps_dict)

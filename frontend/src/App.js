@@ -348,9 +348,24 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
           </span>
         </div>
         <div className="info-item">
-          <span className="info-label">Webhook</span>
+          <span className="info-label">Notification Destinations</span>
           <span className="info-value" style={{ fontSize: '12px', wordBreak: 'break-all' }}>
-            {app.webhook_url ? '✓ Configured' : '✗ Not configured'}
+            {(() => {
+              const destinations = app.notification_destinations || [];
+              if (destinations.length === 0 && app.webhook_url) {
+                // Legacy support
+                return '✓ 1 Discord webhook (legacy)';
+              }
+              if (destinations.length === 0) {
+                return '✗ Not configured';
+              }
+              const discordCount = destinations.filter(d => d.type === 'discord').length;
+              const parts = [];
+              if (discordCount > 0) {
+                parts.push(`${discordCount} Discord${discordCount > 1 ? ' webhooks' : ' webhook'}`);
+              }
+              return parts.length > 0 ? `✓ ${parts.join(', ')}` : '✗ Not configured';
+            })()}
           </span>
         </div>
         <div className="info-item">
@@ -412,13 +427,12 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
     name: '',
     app_store_id: '',
     notification_destinations: [],
-    webhook_url: '',
     interval_override: '',
     enabled: true
   });
 
   const [errors, setErrors] = useState({});
-  const [selectedDestination, setSelectedDestination] = useState('');
+  const [destinations, setDestinations] = useState([{ type: '', webhook_url: '' }]);
   
   useEffect(() => {
     // Update document title
@@ -460,16 +474,17 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
       newErrors.app_store_id = 'App Store ID must be a number';
     }
     
-    if (!selectedDestination) {
-      newErrors.notification_destinations = 'Please select a notification destination';
-    }
-    
-    if (selectedDestination === 'discord' && !formData.webhook_url.trim()) {
-      newErrors.webhook_url = 'Discord Webhook URL is required';
-    } else if (selectedDestination === 'discord' && formData.webhook_url.trim() && 
-               !formData.webhook_url.trim().startsWith('https://discord.com/api/webhooks/')) {
-      newErrors.webhook_url = 'Invalid Discord webhook URL';
-    }
+    // Validate notification destinations
+    destinations.forEach((dest, index) => {
+      if (dest.type) {
+        if (dest.type === 'discord' && !dest.webhook_url.trim()) {
+          newErrors[`webhook_${index}`] = 'Discord Webhook URL is required when Discord is selected';
+        } else if (dest.type === 'discord' && dest.webhook_url.trim() && 
+                   !dest.webhook_url.trim().startsWith('https://discord.com/api/webhooks/')) {
+          newErrors[`webhook_${index}`] = 'Invalid Discord webhook URL';
+        }
+      }
+    });
     
     if (formData.interval_override.trim()) {
       // Validate interval format
@@ -484,13 +499,26 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
   };
 
   const isFormValid = () => {
-    return formData.name.trim() &&
-           formData.app_store_id.trim() &&
-           /^\d+$/.test(formData.app_store_id.trim()) &&
-           selectedDestination &&
-           (selectedDestination !== 'discord' || (formData.webhook_url.trim() && 
-            formData.webhook_url.trim().startsWith('https://discord.com/api/webhooks/'))) &&
-           (!formData.interval_override.trim() || /^\d+[hmsd]$/i.test(formData.interval_override.trim()));
+    // Basic validation - name and app_store_id are required
+    if (!formData.name.trim() || !formData.app_store_id.trim() || !/^\d+$/.test(formData.app_store_id.trim())) {
+      return false;
+    }
+    
+    // Validate interval if provided
+    if (formData.interval_override.trim() && !/^\d+[hmsd]$/i.test(formData.interval_override.trim())) {
+      return false;
+    }
+    
+    // Validate destinations - if a type is selected, webhook must be valid
+    for (const dest of destinations) {
+      if (dest.type === 'discord') {
+        if (!dest.webhook_url.trim() || !dest.webhook_url.trim().startsWith('https://discord.com/api/webhooks/')) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
   };
 
   const handleChange = (e) => {
@@ -510,20 +538,46 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
     }
   };
 
-  const handleDestinationChange = (e) => {
-    const value = e.target.value;
-    setSelectedDestination(value);
-    setFormData(prev => ({
-      ...prev,
-      notification_destinations: value ? [value] : [],
-      webhook_url: value !== 'discord' ? '' : prev.webhook_url
-    }));
+  const handleDestinationTypeChange = (index, value) => {
+    setDestinations(prev => {
+      const newDests = [...prev];
+      newDests[index] = { type: value, webhook_url: value === 'discord' ? newDests[index].webhook_url : '' };
+      
+      // If a destination is selected and it's not the last one, add a new empty destination
+      if (value && index === newDests.length - 1) {
+        newDests.push({ type: '', webhook_url: '' });
+      }
+      
+      // Remove empty destinations at the end (except the last one)
+      while (newDests.length > 1 && !newDests[newDests.length - 2].type && !newDests[newDests.length - 1].type) {
+        newDests.pop();
+      }
+      
+      return newDests;
+    });
     
     // Clear errors
-    if (errors.notification_destinations) {
+    if (errors[`webhook_${index}`]) {
       setErrors(prev => {
         const newErrors = { ...prev };
-        delete newErrors.notification_destinations;
+        delete newErrors[`webhook_${index}`];
+        return newErrors;
+      });
+    }
+  };
+
+  const handleWebhookChange = (index, value) => {
+    setDestinations(prev => {
+      const newDests = [...prev];
+      newDests[index] = { ...newDests[index], webhook_url: value };
+      return newDests;
+    });
+    
+    // Clear error when user starts typing
+    if (errors[`webhook_${index}`]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[`webhook_${index}`];
         return newErrors;
       });
     }
@@ -537,9 +591,17 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
       return;
     }
 
+    // Build notification destinations array - only include destinations with a type
+    const notificationDestinations = destinations
+      .filter(dest => dest.type)
+      .map(dest => ({
+        type: dest.type,
+        webhook_url: dest.webhook_url.trim()
+      }));
+
     const submitData = {
       ...formData,
-      notification_destinations: selectedDestination ? [selectedDestination] : []
+      notification_destinations: notificationDestinations
     };
     
     await onSave(submitData);
@@ -606,35 +668,47 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
             </div>
 
             <div className="form-group">
-              <label htmlFor="notification_destinations">Notification Destinations (*)</label>
-              <select
-                id="notification_destinations"
-                name="notification_destinations"
-                value={selectedDestination}
-                onChange={handleDestinationChange}
-                className={errors.notification_destinations ? 'error-input' : ''}
-              >
-                <option value="">Select a destination</option>
-                <option value="discord">Discord</option>
-              </select>
-              {errors.notification_destinations && <span className="error-text">{errors.notification_destinations}</span>}
+              <label>Notification Destinations (optional)</label>
+              <small style={{ display: 'block', marginBottom: '10px', color: '#666' }}>
+                Add one or more notification destinations. You can add multiple destinations of the same type.
+              </small>
+              {destinations.map((dest, index) => (
+                <div key={index} style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '4px' }}>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label htmlFor={`destination_type_${index}`}>
+                      {index === 0 ? 'Notification Destination' : `Additional Destination ${index + 1}`}
+                    </label>
+                    <select
+                      id={`destination_type_${index}`}
+                      value={dest.type}
+                      onChange={(e) => handleDestinationTypeChange(index, e.target.value)}
+                      style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                    >
+                      <option value="">Select a destination (optional)</option>
+                      <option value="discord">Discord</option>
+                    </select>
+                  </div>
+                  
+                  {dest.type === 'discord' && (
+                    <div>
+                      <label htmlFor={`webhook_url_${index}`}>Discord Webhook URL</label>
+                      <input
+                        type="url"
+                        id={`webhook_url_${index}`}
+                        value={dest.webhook_url}
+                        onChange={(e) => handleWebhookChange(index, e.target.value)}
+                        placeholder="https://discord.com/api/webhooks/..."
+                        className={errors[`webhook_${index}`] ? 'error-input' : ''}
+                        style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                      />
+                      {errors[`webhook_${index}`] && (
+                        <span className="error-text">{errors[`webhook_${index}`]}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-
-            {selectedDestination === 'discord' && (
-              <div className="form-group">
-                <label htmlFor="webhook_url">Discord Webhook URL (*)</label>
-                <input
-                  type="url"
-                  id="webhook_url"
-                  name="webhook_url"
-                  value={formData.webhook_url}
-                  onChange={handleChange}
-                  placeholder="https://discord.com/api/webhooks/..."
-                  className={errors.webhook_url ? 'error-input' : ''}
-                />
-                {errors.webhook_url && <span className="error-text">{errors.webhook_url}</span>}
-              </div>
-            )}
 
             <div className="form-group">
               <label htmlFor="interval_override">Check Interval (optional)</label>
@@ -682,17 +756,46 @@ function AddAppPage({ onSave, onCancel, message, showMessage }) {
 }
 
 function AppModal({ app, onClose, onSave }) {
+  // Initialize destinations from app data
+  const initializeDestinations = () => {
+    if (app?.notification_destinations && app.notification_destinations.length > 0) {
+      return app.notification_destinations.map(dest => ({
+        type: dest.type || 'discord',
+        webhook_url: dest.webhook_url || ''
+      }));
+    } else if (app?.webhook_url) {
+      // Legacy support - convert old webhook_url to new format
+      return [{ type: 'discord', webhook_url: app.webhook_url }];
+    }
+    return [{ type: '', webhook_url: '' }];
+  };
+
   const [formData, setFormData] = useState({
     name: app?.name || '',
     app_store_id: app?.app_store_id || '',
-    webhook_url: app?.webhook_url || '',
     interval_override: app?.interval_override || '',
     enabled: app?.enabled !== false
   });
 
+  const [destinations, setDestinations] = useState(initializeDestinations);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+    
+    // Build notification destinations array - only include destinations with a type
+    const notificationDestinations = destinations
+      .filter(dest => dest.type)
+      .map(dest => ({
+        type: dest.type,
+        webhook_url: dest.webhook_url.trim()
+      }));
+
+    const submitData = {
+      ...formData,
+      notification_destinations: notificationDestinations
+    };
+    
+    onSave(submitData);
   };
 
   const handleChange = (e) => {
@@ -701,6 +804,33 @@ function AppModal({ app, onClose, onSave }) {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  const handleDestinationTypeChange = (index, value) => {
+    setDestinations(prev => {
+      const newDests = [...prev];
+      newDests[index] = { type: value, webhook_url: value === 'discord' ? newDests[index].webhook_url : '' };
+      
+      // If a destination is selected and it's not the last one, add a new empty destination
+      if (value && index === newDests.length - 1) {
+        newDests.push({ type: '', webhook_url: '' });
+      }
+      
+      // Remove empty destinations at the end (except the last one)
+      while (newDests.length > 1 && !newDests[newDests.length - 2].type && !newDests[newDests.length - 1].type) {
+        newDests.pop();
+      }
+      
+      return newDests;
+    });
+  };
+
+  const handleWebhookChange = (index, value) => {
+    setDestinations(prev => {
+      const newDests = [...prev];
+      newDests[index] = { ...newDests[index], webhook_url: value };
+      return newDests;
+    });
   };
 
   return (
@@ -739,16 +869,42 @@ function AppModal({ app, onClose, onSave }) {
           </div>
 
           <div className="form-group">
-            <label htmlFor="webhook_url">Discord Webhook URL *</label>
-            <input
-              type="url"
-              id="webhook_url"
-              name="webhook_url"
-              value={formData.webhook_url}
-              onChange={handleChange}
-              required
-              placeholder="https://discord.com/api/webhooks/..."
-            />
+            <label>Notification Destinations (optional)</label>
+            <small style={{ display: 'block', marginBottom: '10px', color: '#666' }}>
+              Add one or more notification destinations. You can add multiple destinations of the same type.
+            </small>
+            {destinations.map((dest, index) => (
+              <div key={index} style={{ marginBottom: '15px', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}>
+                <div style={{ marginBottom: '10px' }}>
+                  <label htmlFor={`modal_destination_type_${index}`}>
+                    {index === 0 ? 'Notification Destination' : `Additional Destination ${index + 1}`}
+                  </label>
+                  <select
+                    id={`modal_destination_type_${index}`}
+                    value={dest.type}
+                    onChange={(e) => handleDestinationTypeChange(index, e.target.value)}
+                    style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                  >
+                    <option value="">Select a destination (optional)</option>
+                    <option value="discord">Discord</option>
+                  </select>
+                </div>
+                
+                {dest.type === 'discord' && (
+                  <div>
+                    <label htmlFor={`modal_webhook_url_${index}`}>Discord Webhook URL</label>
+                    <input
+                      type="url"
+                      id={`modal_webhook_url_${index}`}
+                      value={dest.webhook_url}
+                      onChange={(e) => handleWebhookChange(index, e.target.value)}
+                      placeholder="https://discord.com/api/webhooks/..."
+                      style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
           <div className="form-group">

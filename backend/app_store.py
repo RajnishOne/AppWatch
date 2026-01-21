@@ -54,14 +54,15 @@ class AppStoreMonitor:
         """Check app for new version and post if needed"""
         app_id = app['id']
         app_store_id = app['app_store_id']
-        webhook_url = app.get('webhook_url')
         
-        if not webhook_url:
-            return {
-                'success': False,
-                'error': 'No webhook URL configured',
-                'checked_at': datetime.now().isoformat()
-            }
+        # Get notification destinations - support both new format and legacy webhook_url
+        notification_destinations = app.get('notification_destinations', [])
+        if not notification_destinations and app.get('webhook_url'):
+            # Legacy support - convert old webhook_url to new format
+            notification_destinations = [{
+                'type': 'discord',
+                'webhook_url': app['webhook_url']
+            }]
         
         try:
             # Fetch current app info
@@ -95,27 +96,44 @@ class AppStoreMonitor:
                     'formatted_preview': self.formatter.format_release_notes(current_version, release_notes)
                 }
             
-            # New version detected - post to Discord
+            # New version detected - post to all configured destinations
             formatted_notes = self.formatter.format_release_notes(current_version, release_notes)
             
-            # Post to Discord
-            success = self._post_to_discord_webhook(webhook_url, formatted_notes)
+            # Post to all notification destinations
+            success_count = 0
+            error_messages = []
             
-            if success:
-                # Update last posted version
+            for dest in notification_destinations:
+                dest_type = dest.get('type', 'discord')
+                if dest_type == 'discord':
+                    webhook_url = dest.get('webhook_url', '').strip()
+                    if webhook_url:
+                        if self._post_to_discord_webhook(webhook_url, formatted_notes):
+                            success_count += 1
+                        else:
+                            error_messages.append(f'Failed to post to Discord webhook')
+            
+            if success_count > 0:
+                # Update last posted version if at least one destination succeeded
                 self.storage.save_last_version(app_id, current_version)
+                message = f'New version posted to {success_count} destination(s)'
+                if error_messages:
+                    message += f' ({len(error_messages)} failed)'
                 return {
                     'success': True,
-                    'message': 'New version posted to Discord',
+                    'message': message,
                     'current_version': current_version,
                     'last_version': last_version,
                     'checked_at': datetime.now().isoformat(),
                     'formatted_preview': formatted_notes
                 }
             else:
+                error_msg = 'Failed to post to any notification destination'
+                if error_messages:
+                    error_msg = '; '.join(error_messages)
                 return {
                     'success': False,
-                    'error': 'Failed to post to Discord',
+                    'error': error_msg,
                     'current_version': current_version,
                     'checked_at': datetime.now().isoformat(),
                     'formatted_preview': formatted_notes
@@ -130,16 +148,18 @@ class AppStoreMonitor:
             }
     
     def post_to_discord(self, app):
-        """Manually post current release notes to Discord"""
+        """Manually post current release notes to all configured notification destinations"""
         app_id = app['id']
         app_store_id = app['app_store_id']
-        webhook_url = app.get('webhook_url')
         
-        if not webhook_url:
-            return {
-                'success': False,
-                'error': 'No webhook URL configured'
-            }
+        # Get notification destinations - support both new format and legacy webhook_url
+        notification_destinations = app.get('notification_destinations', [])
+        if not notification_destinations and app.get('webhook_url'):
+            # Legacy support - convert old webhook_url to new format
+            notification_destinations = [{
+                'type': 'discord',
+                'webhook_url': app['webhook_url']
+            }]
         
         try:
             # Fetch current app info
@@ -157,29 +177,47 @@ class AppStoreMonitor:
             # Update current version
             self.storage.save_current_version(app_id, current_version)
             
-            # Format and post
+            # Format and post to all destinations
             formatted_notes = self.formatter.format_release_notes(current_version, release_notes)
-            success = self._post_to_discord_webhook(webhook_url, formatted_notes)
             
-            if success:
-                # Update last posted version
+            success_count = 0
+            error_messages = []
+            
+            for dest in notification_destinations:
+                dest_type = dest.get('type', 'discord')
+                if dest_type == 'discord':
+                    webhook_url = dest.get('webhook_url', '').strip()
+                    if webhook_url:
+                        if self._post_to_discord_webhook(webhook_url, formatted_notes):
+                            success_count += 1
+                        else:
+                            error_messages.append(f'Failed to post to Discord webhook')
+            
+            if success_count > 0:
+                # Update last posted version if at least one destination succeeded
                 self.storage.save_last_version(app_id, current_version)
+                message = f'Posted to {success_count} destination(s)'
+                if error_messages:
+                    message += f' ({len(error_messages)} failed)'
                 return {
                     'success': True,
-                    'message': 'Posted to Discord',
+                    'message': message,
                     'version': current_version,
                     'formatted_preview': formatted_notes
                 }
             else:
+                error_msg = 'Failed to post to any notification destination'
+                if error_messages:
+                    error_msg = '; '.join(error_messages)
                 return {
                     'success': False,
-                    'error': 'Failed to post to Discord',
+                    'error': error_msg,
                     'version': current_version,
                     'formatted_preview': formatted_notes
                 }
         
         except Exception as e:
-            logger.error(f"Error posting to Discord for app {app_id}: {e}", exc_info=True)
+            logger.error(f"Error posting to notification destinations for app {app_id}: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
