@@ -380,24 +380,30 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
                 flexShrink: 0
               }}
               onError={(e) => {
-                // Hide image if it fails to load
-                e.target.style.display = 'none';
+                // Fallback to default icon if image fails to load
+                e.target.src = '/iosdefault.png';
               }}
             />
           ) : (
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '10px',
-              backgroundColor: '#e0e0e0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '24px',
-              flexShrink: 0
-            }}>
-              📱
-            </div>
+            <img 
+              src="/iosdefault.png" 
+              alt={app.name}
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '10px',
+                objectFit: 'cover',
+                flexShrink: 0
+              }}
+              onError={(e) => {
+                // Final fallback to emoji if default icon fails
+                e.target.style.display = 'none';
+                const fallback = document.createElement('div');
+                fallback.style.cssText = 'width: 48px; height: 48px; border-radius: 10px; background-color: #e0e0e0; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;';
+                fallback.textContent = '📱';
+                e.target.parentNode.insertBefore(fallback, e.target);
+              }}
+            />
           )}
           <h2 style={{ margin: 0 }}>{app.name}</h2>
         </div>
@@ -543,6 +549,7 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
   const [errors, setErrors] = useState({});
   const [destinations, setDestinations] = useState(initializeDestinations);
   const [fetchingMetadata, setFetchingMetadata] = useState(false);
+  const [suggestedName, setSuggestedName] = useState('');
   
   useEffect(() => {
     // Update document title
@@ -572,6 +579,76 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
       document.title = 'App Release Watcher';
     };
   }, [editingApp]);
+
+  // Auto-fetch metadata when App Store ID changes
+  useEffect(() => {
+    const appStoreId = formData.app_store_id.trim();
+    
+    // Only fetch if we have a valid App Store ID and it's different from the editing app
+    if (appStoreId && /^\d+$/.test(appStoreId)) {
+      // Don't fetch if editing and ID hasn't changed
+      if (editingApp && editingApp.app_store_id === appStoreId) {
+        return;
+      }
+      
+      // Debounce the fetch
+      const timeoutId = setTimeout(async () => {
+        setFetchingMetadata(true);
+        try {
+          const response = await fetch(`${API_BASE}/api/apps/metadata/${appStoreId}`);
+          if (response.ok) {
+            const metadata = await response.json();
+            // Update icon automatically
+            if (metadata.artworkUrl) {
+              setFormData(prev => ({
+                ...prev,
+                icon_url: metadata.artworkUrl
+              }));
+            }
+            // Suggest app name (only if name field is empty)
+            if (metadata.trackName) {
+              setSuggestedName(metadata.trackName);
+              // Auto-fill name if it's empty
+              setFormData(prev => {
+                if (!prev.name.trim()) {
+                  return {
+                    ...prev,
+                    name: metadata.trackName
+                  };
+                }
+                return prev;
+              });
+            }
+          } else {
+            // API failed - clear suggestions and use default icon
+            setSuggestedName('');
+            setFormData(prev => ({
+              ...prev,
+              icon_url: '' // Will use default icon
+            }));
+          }
+        } catch (error) {
+          // API failed - clear suggestions and use default icon
+          setSuggestedName('');
+          setFormData(prev => ({
+            ...prev,
+            icon_url: '' // Will use default icon
+          }));
+        } finally {
+          setFetchingMetadata(false);
+        }
+      }, 800); // 800ms debounce
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      // Invalid ID - clear suggestions
+      setSuggestedName('');
+      setFormData(prev => ({
+        ...prev,
+        icon_url: ''
+      }));
+    }
+  }, [formData.app_store_id, editingApp]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -695,36 +772,6 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
     }
   };
 
-  const handleFetchMetadata = async () => {
-    const appStoreId = formData.app_store_id.trim();
-    if (!appStoreId || !/^\d+$/.test(appStoreId)) {
-      showMessage('Please enter a valid App Store ID first', 'error');
-      return;
-    }
-
-    setFetchingMetadata(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/apps/metadata/${appStoreId}`);
-      if (response.ok) {
-        const metadata = await response.json();
-        // Update form with fetched data
-        setFormData(prev => ({
-          ...prev,
-          name: prev.name || metadata.trackName || prev.name,
-          icon_url: metadata.artworkUrl || prev.icon_url
-        }));
-        showMessage('App metadata fetched successfully');
-      } else {
-        const data = await response.json();
-        showMessage(data.error || 'Failed to fetch app metadata', 'error');
-      }
-    } catch (error) {
-      showMessage('Error fetching app metadata: ' + error.message, 'error');
-    } finally {
-      setFetchingMetadata(false);
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -788,51 +835,41 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="Enter your app name"
+                placeholder={suggestedName || "Enter your app name"}
                 className={errors.name ? 'error-input' : ''}
               />
+              {suggestedName && !formData.name && (
+                <small style={{ color: '#666', fontStyle: 'italic', display: 'block', marginTop: '5px' }}>
+                  Suggested: {suggestedName} (from App Store)
+                </small>
+              )}
+              {fetchingMetadata && (
+                <small style={{ color: '#666', display: 'block', marginTop: '5px' }}>
+                  Fetching app info...
+                </small>
+              )}
               {errors.name && <span className="error-text">{errors.name}</span>}
             </div>
 
             <div className="form-group">
               <label htmlFor="app_store_id">App Store ID (*)</label>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <div className="input-with-hint" style={{ flex: 1 }}>
-                  <input
-                    type="text"
-                    id="app_store_id"
-                    name="app_store_id"
-                    value={formData.app_store_id}
-                    onChange={handleChange}
-                    placeholder="Enter your App Store ID"
-                    className={errors.app_store_id ? 'error-input' : ''}
-                    disabled={fetchingMetadata}
-                  />
-                  {formData.app_store_id && !errors.app_store_id && (
-                    <span className="input-hint">ID: {formData.app_store_id}</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleFetchMetadata}
-                  disabled={fetchingMetadata || !formData.app_store_id.trim() || !/^\d+$/.test(formData.app_store_id.trim())}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: fetchingMetadata ? 'not-allowed' : 'pointer',
-                    opacity: (fetchingMetadata || !formData.app_store_id.trim() || !/^\d+$/.test(formData.app_store_id.trim())) ? 0.6 : 1,
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Fetch app name and icon from App Store"
-                >
-                  {fetchingMetadata ? 'Fetching...' : 'Fetch Info'}
-                </button>
+              <div className="input-with-hint">
+                <input
+                  type="text"
+                  id="app_store_id"
+                  name="app_store_id"
+                  value={formData.app_store_id}
+                  onChange={handleChange}
+                  placeholder="Enter your App Store ID"
+                  className={errors.app_store_id ? 'error-input' : ''}
+                  disabled={fetchingMetadata}
+                />
+                {formData.app_store_id && !errors.app_store_id && (
+                  <span className="input-hint">ID: {formData.app_store_id}</span>
+                )}
               </div>
               {errors.app_store_id && <span className="error-text">{errors.app_store_id}</span>}
-              <small>Find this in the App Store URL: apps.apple.com/app/id123456789. Click "Fetch Info" to auto-fill app name and icon.</small>
+              <small>Find this in the App Store URL: apps.apple.com/app/id123456789. App name and icon will be fetched automatically.</small>
             </div>
 
             <div className="form-group">
