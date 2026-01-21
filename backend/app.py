@@ -19,6 +19,7 @@ from backend.app_store import AppStoreMonitor
 from backend.formatter import DiscordFormatter
 from backend.storage import StorageManager
 from backend.version import get_version
+from backend.auth import require_auth
 
 # Application version - dynamically fetched
 APP_VERSION = get_version()
@@ -283,6 +284,114 @@ def setup_scheduler():
 
 # API Routes
 
+# Authentication endpoints (public)
+@app.route('/api/auth/status', methods=['GET'])
+def auth_status():
+    """Get authentication status"""
+    auth = storage.get_auth()
+    is_configured = storage.is_auth_configured()
+    return jsonify({
+        'enabled': auth.get('enabled', False),
+        'configured': is_configured,
+        'auth_type': auth.get('auth_type', 'forms'),
+        'bypass_local_networks': auth.get('bypass_local_networks', False),
+        'api_key': auth.get('api_key', '')  # Include API key for authenticated users
+    })
+
+
+@app.route('/api/auth/setup', methods=['POST'])
+def auth_setup():
+    """Setup authentication (first time setup)"""
+    if not request.json:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    
+    data = request.json
+    
+    # Check if auth is already configured
+    if storage.is_auth_configured():
+        return jsonify({'error': 'Authentication is already configured'}), 400
+    
+    # Validate required fields
+    auth_type = data.get('auth_type', 'forms')
+    if auth_type not in ['basic', 'forms']:
+        return jsonify({'error': 'Invalid auth_type. Must be "basic" or "forms"'}), 400
+    
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    confirm_password = data.get('confirm_password', '').strip()
+    
+    if not username:
+        return jsonify({'error': 'Username is required'}), 400
+    if not password:
+        return jsonify({'error': 'Password is required'}), 400
+    if password != confirm_password:
+        return jsonify({'error': 'Passwords do not match'}), 400
+    if len(password) < 3:
+        return jsonify({'error': 'Password must be at least 3 characters'}), 400
+    
+    # Save authentication
+    auth_data = {
+        'enabled': True,
+        'auth_type': auth_type,
+        'username': username,
+        'password': password,  # Will be hashed in save_auth
+        'bypass_local_networks': data.get('bypass_local_networks', False)
+    }
+    
+    try:
+        storage.save_auth(auth_data)
+        return jsonify({'message': 'Authentication configured successfully'}), 200
+    except Exception as e:
+        logger.error(f"Error setting up auth: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to configure authentication'}), 500
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    """Login endpoint for Forms authentication"""
+    if not request.json:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    
+    data = request.json
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required'}), 400
+    
+    auth = storage.get_auth()
+    
+    # Verify credentials
+    if username != auth.get('username') or not storage.verify_password(password):
+        return jsonify({'error': 'Invalid username or password'}), 401
+    
+    # Generate a simple token (in production, use proper JWT or session management)
+    import base64
+    password_hash = auth.get('password_hash', '')
+    token = base64.b64encode(f"{username}:{password_hash}".encode('utf-8')).decode('utf-8')
+    
+    return jsonify({
+        'token': token,
+        'auth_type': auth.get('auth_type', 'forms'),
+        'api_key': auth.get('api_key', '')  # Include API key in login response
+    }), 200
+
+
+@app.route('/api/auth/api-key/regenerate', methods=['POST'])
+@require_auth(storage)
+def regenerate_api_key():
+    """Regenerate API key"""
+    try:
+        new_key = storage.regenerate_api_key()
+        return jsonify({
+            'api_key': new_key,
+            'message': 'API key regenerated successfully'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error regenerating API key: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to regenerate API key'}), 500
+
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):
@@ -305,6 +414,7 @@ def serve_frontend(path):
 
 
 @app.route('/api/status', methods=['GET'])
+@require_auth(storage)
 def status():
     """Health check endpoint"""
     return jsonify({
@@ -316,6 +426,7 @@ def status():
 
 
 @app.route('/api/apps', methods=['GET'])
+@require_auth(storage)
 def get_apps():
     """Get all apps"""
     apps = load_apps()
@@ -323,6 +434,7 @@ def get_apps():
 
 
 @app.route('/api/apps', methods=['POST'])
+@require_auth(storage)
 def create_app():
     """Create a new app"""
     if not request.json:
@@ -401,6 +513,7 @@ def create_app():
 
 
 @app.route('/api/apps/<app_id>', methods=['PUT'])
+@require_auth(storage)
 def update_app(app_id):
     """Update an app"""
     if not request.json:
@@ -483,6 +596,7 @@ def update_app(app_id):
 
 
 @app.route('/api/apps/<app_id>', methods=['DELETE'])
+@require_auth(storage)
 def remove_app(app_id):
     """Delete an app"""
     if delete_app(app_id):
@@ -493,6 +607,7 @@ def remove_app(app_id):
 
 
 @app.route('/api/apps/<app_id>/check', methods=['POST'])
+@require_auth(storage)
 def check_app_endpoint(app_id):
     """Manually check an app for updates"""
     result, status_code = check_app(app_id)
@@ -500,6 +615,7 @@ def check_app_endpoint(app_id):
 
 
 @app.route('/api/apps/<app_id>/post', methods=['POST'])
+@require_auth(storage)
 def post_app_endpoint(app_id):
     """Manually post release notes to all configured notification destinations"""
     result, status_code = post_to_discord(app_id)
@@ -507,6 +623,7 @@ def post_app_endpoint(app_id):
 
 
 @app.route('/api/apps/metadata/<app_store_id>', methods=['GET'])
+@require_auth(storage)
 def get_app_metadata(app_store_id):
     """Fetch app metadata from App Store including icon"""
     try:
@@ -527,6 +644,7 @@ def get_app_metadata(app_store_id):
 
 
 @app.route('/api/logs', methods=['GET'])
+@require_auth(storage)
 def get_logs():
     """Get recent logs (simplified - in production use proper log aggregation)"""
     # For now, return empty. In production, you'd read from log files
@@ -534,6 +652,7 @@ def get_logs():
 
 
 @app.route('/api/settings', methods=['GET'])
+@require_auth(storage)
 def get_settings():
     """Get application settings"""
     try:
@@ -546,6 +665,7 @@ def get_settings():
 
 
 @app.route('/api/settings', methods=['PUT'])
+@require_auth(storage)
 def update_settings():
     """Update application settings"""
     if not request.json:

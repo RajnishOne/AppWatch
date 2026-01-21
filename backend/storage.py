@@ -3,6 +3,9 @@ Storage management for app data and version tracking
 """
 import json
 import logging
+import hashlib
+import base64
+import secrets
 from pathlib import Path
 from datetime import datetime
 import uuid
@@ -19,8 +22,10 @@ class StorageManager:
         
         self.apps_file = self.data_dir / 'apps.json'
         self.settings_file = self.data_dir / 'settings.json'
+        self.auth_file = self.data_dir / 'auth.json'
         self._ensure_apps_file()
         self._ensure_settings_file()
+        self._ensure_auth_file()
     
     def _ensure_apps_file(self):
         """Ensure apps.json exists"""
@@ -43,6 +48,19 @@ class StorageManager:
                 'smtp_use_tls': True
             }
             self._save_settings(default_settings)
+    
+    def _ensure_auth_file(self):
+        """Ensure auth.json exists"""
+        if not self.auth_file.exists():
+            default_auth = {
+                'enabled': False,
+                'auth_type': 'forms',  # 'basic' or 'forms'
+                'username': '',
+                'password_hash': '',
+                'bypass_local_networks': False,
+                'api_key': self._generate_api_key()
+            }
+            self._save_auth(default_auth)
     
     def _load_settings(self):
         """Load settings from JSON file"""
@@ -298,4 +316,95 @@ class StorageManager:
         except Exception as e:
             logger.error(f"Error saving current version: {e}")
             raise
+    
+    # Authentication methods
+    def _load_auth(self):
+        """Load authentication settings from JSON file"""
+        try:
+            if self.auth_file.exists():
+                with open(self.auth_file, 'r') as f:
+                    return json.load(f)
+            return {}
+        except Exception as e:
+            logger.error(f"Error loading auth: {e}")
+            return {}
+    
+    def _save_auth(self, auth_dict):
+        """Save authentication settings to JSON file"""
+        try:
+            with open(self.auth_file, 'w') as f:
+                json.dump(auth_dict, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving auth: {e}")
+            raise
+    
+    def get_auth(self):
+        """Get authentication settings"""
+        auth = self._load_auth()
+        defaults = {
+            'enabled': False,
+            'auth_type': 'forms',
+            'username': '',
+            'password_hash': '',
+            'bypass_local_networks': False,
+            'api_key': self._generate_api_key() if not auth.get('api_key') else auth.get('api_key')
+        }
+        result = {**defaults, **auth}
+        # Ensure API key exists
+        if not result.get('api_key'):
+            result['api_key'] = self._generate_api_key()
+            self._save_auth(result)
+        return result
+    
+    def save_auth(self, auth_data):
+        """Save authentication settings"""
+        # Hash password if provided
+        if 'password' in auth_data and auth_data['password']:
+            auth_data['password_hash'] = self._hash_password(auth_data['password'])
+            del auth_data['password']
+        # Don't save password_hash if it's empty
+        if 'password_hash' in auth_data and not auth_data['password_hash']:
+            del auth_data['password_hash']
+        
+        self._save_auth(auth_data)
+        return True
+    
+    def _hash_password(self, password):
+        """Hash a password using SHA256"""
+        return hashlib.sha256(password.encode('utf-8')).hexdigest()
+    
+    def verify_password(self, password):
+        """Verify a password against stored hash"""
+        auth = self.get_auth()
+        if not auth.get('password_hash'):
+            return False
+        password_hash = self._hash_password(password)
+        return password_hash == auth.get('password_hash')
+    
+    def is_auth_enabled(self):
+        """Check if authentication is enabled"""
+        auth = self.get_auth()
+        return auth.get('enabled', False)
+    
+    def is_auth_configured(self):
+        """Check if authentication is configured (has username and password)"""
+        auth = self.get_auth()
+        return bool(auth.get('username') and auth.get('password_hash'))
+    
+    def _generate_api_key(self):
+        """Generate a secure random API key"""
+        return secrets.token_urlsafe(32)
+    
+    def regenerate_api_key(self):
+        """Regenerate the API key"""
+        auth = self.get_auth()
+        auth['api_key'] = self._generate_api_key()
+        self._save_auth(auth)
+        return auth['api_key']
+    
+    def verify_api_key(self, api_key):
+        """Verify an API key"""
+        auth = self.get_auth()
+        stored_key = auth.get('api_key', '')
+        return bool(stored_key and api_key == stored_key)
 
