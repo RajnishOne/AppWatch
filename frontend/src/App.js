@@ -113,17 +113,48 @@ const Icons = {
       <line x1="19" y1="12" x2="5" y2="12"/>
       <polyline points="12 19 5 12 12 5"/>
     </svg>
+  ),
+  ChevronDown: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  ),
+  ChevronRight: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
   )
 };
 
 // Sidebar Component
-function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sidebarOpen, onCloseSidebar }) {
+function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sidebarOpen, onCloseSidebar, settingsSection }) {
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
+  
   const navItems = [
     { id: 'dashboard', label: 'Apps', icon: Icons.Apps, badge: appsCount },
     { id: 'add-app', label: 'Add App', icon: Icons.Add },
     { id: 'activity', label: 'Activity', icon: Icons.Activity },
-    { id: 'settings', label: 'Settings', icon: Icons.Settings },
   ];
+
+  const settingsSubItems = [
+    { id: 'general', label: 'General' },
+    { id: 'webhook', label: 'Webhook' },
+    { id: 'security', label: 'Security' },
+  ];
+
+  // Auto-expand settings if we're on a settings page
+  useEffect(() => {
+    if (currentPage === 'settings' || settingsSection) {
+      setSettingsExpanded(true);
+    }
+  }, [currentPage, settingsSection]);
+
+  const isSettingsActive = currentPage === 'settings';
+  const isSettingsSubItemActive = (subId) => {
+    if (!isSettingsActive) return false;
+    if (!settingsSection && subId === 'general') return true; // Default to general
+    return settingsSection === subId;
+  };
 
   return (
     <>
@@ -156,6 +187,50 @@ function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sid
                 )}
               </button>
             ))}
+            
+            {/* Settings with expandable sub-menu */}
+            <div className="nav-item-group">
+              <div className={`nav-item nav-item-with-submenu ${isSettingsActive ? 'active' : ''}`}>
+                <button
+                  onClick={() => {
+                    if (!settingsExpanded) {
+                      setSettingsExpanded(true);
+                    }
+                    onNavigate('settings', 'general');
+                    onCloseSidebar();
+                  }}
+                >
+                  <Icons.Settings />
+                  <span>Settings</span>
+                </button>
+                <button
+                  className="nav-item-expand"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSettingsExpanded(!settingsExpanded);
+                  }}
+                >
+                  {settingsExpanded ? <Icons.ChevronDown /> : <Icons.ChevronRight />}
+                </button>
+              </div>
+              
+              {settingsExpanded && (
+                <div className="nav-submenu">
+                  {settingsSubItems.map(subItem => (
+                    <button
+                      key={subItem.id}
+                      className={`nav-subitem ${isSettingsSubItemActive(subItem.id) ? 'active' : ''}`}
+                      onClick={() => {
+                        onNavigate('settings', subItem.id);
+                        onCloseSidebar();
+                      }}
+                    >
+                      {subItem.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </nav>
 
@@ -179,7 +254,7 @@ function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sid
 }
 
 // Main Layout Component
-function AppLayout({ children, currentPage, onNavigate, onLogout, authStatus, appsCount }) {
+function AppLayout({ children, currentPage, onNavigate, onLogout, authStatus, appsCount, settingsSection }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -196,6 +271,7 @@ function AppLayout({ children, currentPage, onNavigate, onLogout, authStatus, ap
         appsCount={appsCount}
         sidebarOpen={sidebarOpen}
         onCloseSidebar={() => setSidebarOpen(false)}
+        settingsSection={settingsSection}
       />
       
       <main className="main-content">
@@ -387,6 +463,13 @@ function App() {
         }
       } else if (path === '/settings' || path.includes('/settings')) {
         setCurrentPage('settings');
+        // Extract section from path
+        const sectionMatch = path.match(/\/settings\/(\w+)/);
+        if (sectionMatch) {
+          setSettingsSection(sectionMatch[1]);
+        } else {
+          setSettingsSection('general');
+        }
       } else if (path === '/activity' || path.includes('/activity')) {
         setCurrentPage('activity');
       } else {
@@ -441,7 +524,9 @@ function App() {
     setTimeout(() => setMessage(null), 5000);
   };
 
-  const handleNavigate = (page) => {
+  const [settingsSection, setSettingsSection] = useState('general');
+
+  const handleNavigate = (page, section = null) => {
     if (page === 'dashboard') {
       setCurrentPage('dashboard');
       setEditingApp(null);
@@ -452,7 +537,9 @@ function App() {
       window.history.pushState({ page: 'add-app' }, '', '/add-app');
     } else if (page === 'settings') {
       setCurrentPage('settings');
-      window.history.pushState({ page: 'settings' }, '', '/settings');
+      setSettingsSection(section || 'general');
+      const sectionPath = section && section !== 'general' ? `/${section}` : '';
+      window.history.pushState({ page: 'settings', section }, '', `/settings${sectionPath}`);
     } else if (page === 'activity') {
       setCurrentPage('activity');
       window.history.pushState({ page: 'activity' }, '', '/activity');
@@ -649,6 +736,8 @@ function App() {
             onCancel={() => handleNavigate('dashboard')}
             message={message}
             showMessage={showMessage}
+            section={settingsSection}
+            onNavigateSection={(section) => handleNavigate('settings', section)}
           />
         );
       case 'activity':
@@ -684,6 +773,7 @@ function App() {
       onLogout={handleLogout}
       authStatus={authStatus}
       appsCount={apps.length}
+      settingsSection={settingsSection}
     >
       {renderContent()}
     </AppLayout>
@@ -1408,7 +1498,7 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
   );
 }
 
-function SettingsPage({ onCancel, message, showMessage }) {
+function SettingsPage({ onCancel, message, showMessage, section = 'general', onNavigateSection }) {
   const [settings, setSettings] = useState({
     default_interval: '12h',
     monitoring_enabled_by_default: true,
@@ -1428,6 +1518,12 @@ function SettingsPage({ onCancel, message, showMessage }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const settingsSections = [
+    { id: 'general', label: 'General' },
+    { id: 'webhook', label: 'Webhook' },
+    { id: 'security', label: 'Security' },
+  ];
 
   useEffect(() => {
     loadSettings();
@@ -1553,30 +1649,16 @@ function SettingsPage({ onCancel, message, showMessage }) {
     );
   }
 
-  return (
-    <>
-      <div className="page-header">
-        <div className="page-header-left">
-          <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">Configure application settings</p>
-        </div>
-      </div>
-
-      <div className="page-content">
-        <div className="form-page">
-          {message && (
-            <div className={`alert alert-${message.type}`}>
-              {message.text}
+  const renderSectionContent = () => {
+    switch (section) {
+      case 'general':
+        return (
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <h3 className="settings-section-title">General Settings</h3>
+              <p className="settings-section-description">Configure default behavior and monitoring preferences</p>
             </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <div className="settings-section">
-              <div className="settings-section-header">
-                <h3 className="settings-section-title">General Settings</h3>
-                <p className="settings-section-description">Configure default behavior and monitoring preferences</p>
-              </div>
-              <div className="settings-section-body">
+            <div className="settings-section-body">
                 <div className="form-group">
                   <label className="form-label">Default Check Interval</label>
                   <input
@@ -1626,13 +1708,15 @@ function SettingsPage({ onCancel, message, showMessage }) {
                 </div>
               </div>
             </div>
-
-            <div className="settings-section">
-              <div className="settings-section-header">
-                <h3 className="settings-section-title">Notification Defaults</h3>
-                <p className="settings-section-description">Default settings for notification destinations</p>
-              </div>
-              <div className="settings-section-body">
+        );
+      case 'webhook':
+        return (
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <h3 className="settings-section-title">Webhook Settings</h3>
+              <p className="settings-section-description">Default settings for notification destinations</p>
+            </div>
+            <div className="settings-section-body">
                 <div className="form-group">
                   <label className="form-label">Telegram Bot Token</label>
                   <input
@@ -1723,13 +1807,15 @@ function SettingsPage({ onCancel, message, showMessage }) {
                 </div>
               </div>
             </div>
-
-            <div className="settings-section">
-              <div className="settings-section-header">
-                <h3 className="settings-section-title">Security</h3>
-                <p className="settings-section-description">Manage API access and authentication</p>
-              </div>
-              <div className="settings-section-body">
+        );
+      case 'security':
+        return (
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <h3 className="settings-section-title">Security Settings</h3>
+              <p className="settings-section-description">Manage API access and authentication</p>
+            </div>
+            <div className="settings-section-body">
                 <div className="form-group">
                   <label className="form-label">API Key</label>
                   <div style={{ display: 'flex', gap: '12px' }}>
@@ -1756,17 +1842,64 @@ function SettingsPage({ onCancel, message, showMessage }) {
                 </div>
               </div>
             </div>
+        );
+      default:
+        return null;
+    }
+  };
 
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary btn-lg" disabled={saving}>
-                <Icons.Check /> {saving ? 'Saving...' : 'Save Settings'}
-              </button>
+  return (
+    <>
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">Configure application settings</p>
+        </div>
+      </div>
+
+      <div className="page-content">
+        <div className="settings-layout">
+          {/* Nested Settings Sidebar */}
+          <aside className="settings-sidebar">
+            <nav className="settings-nav">
+              {settingsSections.map(sec => (
+                <button
+                  key={sec.id}
+                  className={`settings-nav-item ${section === sec.id ? 'active' : ''}`}
+                  onClick={() => onNavigateSection(sec.id)}
+                >
+                  {sec.label}
+                </button>
+              ))}
+            </nav>
+          </aside>
+
+          {/* Settings Content */}
+          <div className="settings-content-area">
+            <div className="form-page">
+              {message && (
+                <div className={`alert alert-${message.type}`}>
+                  {message.text}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit}>
+                {renderSectionContent()}
+
+                <div className="form-actions">
+                  <button type="submit" className="btn btn-primary btn-lg" disabled={saving}>
+                    <Icons.Check /> {saving ? 'Saving...' : 'Save Settings'}
+                  </button>
+                </div>
+              </form>
+
+              {section === 'general' && (
+                <div className="version-info">
+                  <span className="version-label">Version</span>
+                  <span className="version-value">{settings.version || '1.8.5'}</span>
+                </div>
+              )}
             </div>
-          </form>
-
-          <div className="version-info">
-            <span className="version-label">Version</span>
-            <span className="version-value">{settings.version || '1.8.5'}</span>
           </div>
         </div>
       </div>
