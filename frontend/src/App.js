@@ -1800,38 +1800,7 @@ function SettingsPage({ onCancel, message, showMessage, section = 'general', onN
             </div>
         );
       case 'appearance':
-        return (
-          <div className="settings-section">
-            <div className="settings-section-header">
-              <h3 className="settings-section-title">Appearance Settings</h3>
-              <p className="settings-section-description">Customize the look and feel of the application</p>
-            </div>
-            <div className="settings-section-body">
-              <div className="form-group">
-                <label className="form-label">Theme</label>
-                <div className="theme-toggle-group">
-                  <button
-                    type="button"
-                    className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
-                    onClick={() => onThemeChange('dark')}
-                  >
-                    <div className="theme-option-icon">🌙</div>
-                    <div className="theme-option-label">Dark</div>
-                  </button>
-                  <button
-                    type="button"
-                    className={`theme-option ${theme === 'light' ? 'active' : ''}`}
-                    onClick={() => onThemeChange('light')}
-                  >
-                    <div className="theme-option-icon">☀️</div>
-                    <div className="theme-option-label">Light</div>
-                  </button>
-                </div>
-                <span className="form-hint">Choose your preferred color theme</span>
-              </div>
-            </div>
-          </div>
-        );
+        return null; // Render separately outside form
       default:
         return null;
     }
@@ -1865,30 +1834,62 @@ function SettingsPage({ onCancel, message, showMessage, section = 'general', onN
 
           {/* Settings Content */}
           <div className="settings-content-area">
-            <div className="form-page">
-              {message && (
-                <div className={`alert alert-${message.type}`}>
-                  {message.text}
-                </div>
-              )}
+            {section === 'appearance' ? (
+              <div className="form-page">
+                {message && (
+                  <div className={`alert alert-${message.type}`}>
+                    {message.text}
+                  </div>
+                )}
 
-              <form onSubmit={handleSubmit}>
-                {renderSectionContent()}
-
-                <div className="form-actions">
-                  <button type="submit" className="btn btn-primary btn-lg" disabled={saving}>
-                    <Icons.Check /> {saving ? 'Saving...' : 'Save Settings'}
-                  </button>
+                <div className="settings-section">
+                  <div className="settings-section-header">
+                    <h3 className="settings-section-title">Appearance Settings</h3>
+                    <p className="settings-section-description">Customize the look and feel of the application</p>
+                  </div>
+                  <div className="settings-section-body">
+                    <div className="form-group">
+                      <label className="form-label">Theme</label>
+                      <select
+                        value={theme}
+                        onChange={(e) => onThemeChange(e.target.value)}
+                        className="form-select"
+                        style={{ maxWidth: '200px' }}
+                      >
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                      </select>
+                      <span className="form-hint">Choose your preferred color theme</span>
+                    </div>
+                  </div>
                 </div>
-              </form>
+              </div>
+            ) : (
+              <div className="form-page">
+                {message && (
+                  <div className={`alert alert-${message.type}`}>
+                    {message.text}
+                  </div>
+                )}
 
-              {section === 'general' && (
-                <div className="version-info">
-                  <span className="version-label">Version</span>
-                  <span className="version-value">{settings.version || '1.8.5'}</span>
-                </div>
-              )}
-            </div>
+                <form onSubmit={handleSubmit}>
+                  {renderSectionContent()}
+
+                  <div className="form-actions">
+                    <button type="submit" className="btn btn-primary btn-lg" disabled={saving}>
+                      <Icons.Check /> {saving ? 'Saving...' : 'Save Settings'}
+                    </button>
+                  </div>
+                </form>
+
+                {section === 'general' && (
+                  <div className="version-info">
+                    <span className="version-label">Version</span>
+                    <span className="version-value">{settings.version || '1.8.5'}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
