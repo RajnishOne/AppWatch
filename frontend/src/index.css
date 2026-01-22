@@ -487,29 +487,41 @@ body {
 
 .app-card-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   padding-top: 16px;
   border-top: 1px solid var(--border-color);
 }
 
+.app-card-actions .btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 5px;
+}
+
 .app-card-actions .btn svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   display: block;
 }
 
+.app-card-actions .btn-icon-only {
+  padding: 6px;
+  min-width: 28px;
+}
+
 .app-card-actions .btn-icon-only svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 /* Ensure all button icons are visible */
 .btn svg {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   stroke: currentColor;
   fill: none;
   flex-shrink: 0;
@@ -544,20 +556,20 @@ body {
 }
 
 .btn-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   stroke: currentColor;
   fill: none;
 }
 
 .btn-icon-only {
-  padding: 10px;
-  min-width: 36px;
+  padding: 8px;
+  min-width: 32px;
 }
 
 .btn-icon-only svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .btn:disabled {
@@ -608,8 +620,10 @@ body {
 }
 
 .btn-sm {
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 5px;
 }
 
 .btn-lg {
