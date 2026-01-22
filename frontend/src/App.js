@@ -127,34 +127,13 @@ const Icons = {
 };
 
 // Sidebar Component
-function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sidebarOpen, onCloseSidebar, settingsSection }) {
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
-  
+function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sidebarOpen, onCloseSidebar }) {
   const navItems = [
     { id: 'dashboard', label: 'Apps', icon: Icons.Apps, badge: appsCount },
     { id: 'add-app', label: 'Add App', icon: Icons.Add },
     { id: 'activity', label: 'Activity', icon: Icons.Activity },
+    { id: 'settings', label: 'Settings', icon: Icons.Settings },
   ];
-
-  const settingsSubItems = [
-    { id: 'general', label: 'General' },
-    { id: 'webhook', label: 'Webhook' },
-    { id: 'security', label: 'Security' },
-  ];
-
-  // Auto-expand settings if we're on a settings page
-  useEffect(() => {
-    if (currentPage === 'settings' || settingsSection) {
-      setSettingsExpanded(true);
-    }
-  }, [currentPage, settingsSection]);
-
-  const isSettingsActive = currentPage === 'settings';
-  const isSettingsSubItemActive = (subId) => {
-    if (!isSettingsActive) return false;
-    if (!settingsSection && subId === 'general') return true; // Default to general
-    return settingsSection === subId;
-  };
 
   return (
     <>
@@ -176,7 +155,11 @@ function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sid
                 key={item.id}
                 className={`nav-item ${currentPage === item.id || (item.id === 'dashboard' && currentPage === 'edit-app') ? 'active' : ''}`}
                 onClick={() => {
-                  onNavigate(item.id);
+                  if (item.id === 'settings') {
+                    onNavigate('settings', 'general');
+                  } else {
+                    onNavigate(item.id);
+                  }
                   onCloseSidebar();
                 }}
               >
@@ -187,50 +170,6 @@ function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sid
                 )}
               </button>
             ))}
-            
-            {/* Settings with expandable sub-menu */}
-            <div className="nav-item-group">
-              <div className={`nav-item nav-item-with-submenu ${isSettingsActive ? 'active' : ''}`}>
-                <button
-                  onClick={() => {
-                    if (!settingsExpanded) {
-                      setSettingsExpanded(true);
-                    }
-                    onNavigate('settings', 'general');
-                    onCloseSidebar();
-                  }}
-                >
-                  <Icons.Settings />
-                  <span>Settings</span>
-                </button>
-                <button
-                  className="nav-item-expand"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSettingsExpanded(!settingsExpanded);
-                  }}
-                >
-                  {settingsExpanded ? <Icons.ChevronDown /> : <Icons.ChevronRight />}
-                </button>
-              </div>
-              
-              {settingsExpanded && (
-                <div className="nav-submenu">
-                  {settingsSubItems.map(subItem => (
-                    <button
-                      key={subItem.id}
-                      className={`nav-subitem ${isSettingsSubItemActive(subItem.id) ? 'active' : ''}`}
-                      onClick={() => {
-                        onNavigate('settings', subItem.id);
-                        onCloseSidebar();
-                      }}
-                    >
-                      {subItem.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         </nav>
 
@@ -254,7 +193,7 @@ function Sidebar({ currentPage, onNavigate, onLogout, authStatus, appsCount, sid
 }
 
 // Main Layout Component
-function AppLayout({ children, currentPage, onNavigate, onLogout, authStatus, appsCount, settingsSection }) {
+function AppLayout({ children, currentPage, onNavigate, onLogout, authStatus, appsCount }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -271,7 +210,6 @@ function AppLayout({ children, currentPage, onNavigate, onLogout, authStatus, ap
         appsCount={appsCount}
         sidebarOpen={sidebarOpen}
         onCloseSidebar={() => setSidebarOpen(false)}
-        settingsSection={settingsSection}
       />
       
       <main className="main-content">
@@ -773,7 +711,6 @@ function App() {
       onLogout={handleLogout}
       authStatus={authStatus}
       appsCount={apps.length}
-      settingsSection={settingsSection}
     >
       {renderContent()}
     </AppLayout>
