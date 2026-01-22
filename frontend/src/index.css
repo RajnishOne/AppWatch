@@ -167,6 +167,9 @@ body {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
+  display: block;
+  stroke: currentColor;
+  fill: none;
 }
 
 .nav-item-badge {
@@ -552,6 +555,33 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
+.app-card-actions .btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.app-card-actions .btn-icon-only svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Ensure all button icons are visible */
+.btn svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.btn-icon-only svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -566,6 +596,30 @@ body {
   font-weight: 600;
   transition: all 0.2s ease;
   white-space: nowrap;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+}
+
+.btn-icon-only {
+  padding: 10px;
+  min-width: 36px;
+}
+
+.btn-icon-only svg {
+  width: 18px;
+  height: 18px;
 }
 
 .btn:disabled {
