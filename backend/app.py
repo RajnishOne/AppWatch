@@ -469,27 +469,6 @@ def regenerate_api_key():
         return jsonify({'error': 'Failed to regenerate API key'}), 500
 
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_frontend(path):
-    """Serve frontend - handle SPA routing"""
-    # Don't handle API routes here - they're defined above
-    if path.startswith('api/'):
-        return jsonify({'error': 'Not found'}), 404
-    
-    if static_folder and os.path.exists(os.path.join(static_folder, 'index.html')):
-        # Serve static files if they exist
-        if path:
-            static_path = os.path.join(static_folder, path)
-            if os.path.exists(static_path) and os.path.isfile(static_path):
-                return send_from_directory(static_folder, path)
-        
-        # Fallback to index.html for SPA routing
-        return send_from_directory(static_folder, 'index.html')
-    else:
-        return jsonify({'message': 'Frontend not built. Please build the frontend first.'}), 503
-
-
 @app.route('/api/status', methods=['GET'])
 @require_auth(storage)
 def status():
@@ -858,6 +837,28 @@ def update_settings():
     except Exception as e:
         logger.error(f"Error updating settings: {e}", exc_info=True)
         return jsonify({'error': 'Failed to update settings'}), 500
+
+
+# Catch-all route for SPA - must be last to not interfere with API routes
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    """Serve frontend - handle SPA routing"""
+    # Don't handle API routes here - they're defined above
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    
+    if static_folder and os.path.exists(os.path.join(static_folder, 'index.html')):
+        # Serve static files if they exist
+        if path:
+            static_path = os.path.join(static_folder, path)
+            if os.path.exists(static_path) and os.path.isfile(static_path):
+                return send_from_directory(static_folder, path)
+        
+        # Fallback to index.html for SPA routing
+        return send_from_directory(static_folder, 'index.html')
+    else:
+        return jsonify({'message': 'Frontend not built. Please build the frontend first.'}), 503
 
 
 # Initialize scheduler when module loads
