@@ -902,23 +902,19 @@ function AppCard({ app, onEdit, onDelete, onCheck, onPost, checking, posting }) 
 
         <div className="app-card-actions">
           <button className="btn btn-secondary btn-sm" onClick={() => onCheck(app.id)} disabled={checking || posting}>
-            <span className="btn-icon"><Icons.Refresh /></span>
-            <span>{checking ? 'Checking...' : 'Check'}</span>
+            {checking ? 'Checking...' : 'Check'}
           </button>
           <button className="btn btn-success btn-sm" onClick={() => onPost(app.id)} disabled={checking || posting}>
-            <span className="btn-icon"><Icons.Send /></span>
-            <span>{posting ? 'Posting...' : 'Post'}</span>
+            {posting ? 'Posting...' : 'Post'}
           </button>
           <button className="btn btn-secondary btn-sm" onClick={loadPreview} disabled={loadingPreview}>
-            <span className="btn-icon"><Icons.Eye /></span>
-            <span>{loadingPreview ? 'Loading...' : 'Preview'}</span>
+            {loadingPreview ? 'Loading...' : 'Preview'}
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => onEdit(app)} disabled={checking || posting}>
-            <span className="btn-icon"><Icons.Edit /></span>
-            <span>Edit</span>
+            Edit
           </button>
-          <button className="btn btn-danger btn-sm btn-icon-only" onClick={() => onDelete(app.id)} disabled={checking || posting} title="Delete">
-            <Icons.Delete />
+          <button className="btn btn-danger btn-sm" onClick={() => onDelete(app.id)} disabled={checking || posting}>
+            Delete
           </button>
         </div>
       </div>
