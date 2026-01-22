@@ -238,6 +238,18 @@ function App() {
   const appsLoadedRef = useRef(false);
   const loadingAppsRef = useRef(false);
 
+  // Theme state
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem('app_theme');
+    return savedTheme || 'dark';
+  });
+
+  // Apply theme on mount and when theme changes
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('app_theme', theme);
+  }, [theme]);
+
   // Check authentication status on mount
   useEffect(() => {
     checkAuthStatus();
@@ -676,6 +688,8 @@ function App() {
             showMessage={showMessage}
             section={settingsSection}
             onNavigateSection={(section) => handleNavigate('settings', section)}
+            theme={theme}
+            onThemeChange={setTheme}
           />
         );
       case 'activity':
@@ -1439,7 +1453,7 @@ function AddAppPage({ onSave, onCancel, message, showMessage, editingApp }) {
   );
 }
 
-function SettingsPage({ onCancel, message, showMessage, section = 'general', onNavigateSection }) {
+function SettingsPage({ onCancel, message, showMessage, section = 'general', onNavigateSection, theme, onThemeChange }) {
   const [settings, setSettings] = useState({
     default_interval: '12h',
     monitoring_enabled_by_default: true,
@@ -1464,6 +1478,7 @@ function SettingsPage({ onCancel, message, showMessage, section = 'general', onN
     { id: 'general', label: 'General' },
     { id: 'webhook', label: 'Webhook' },
     { id: 'security', label: 'Security' },
+    { id: 'appearance', label: 'Appearance' },
   ];
 
   useEffect(() => {
@@ -1783,6 +1798,39 @@ function SettingsPage({ onCancel, message, showMessage, section = 'general', onN
                 </div>
               </div>
             </div>
+        );
+      case 'appearance':
+        return (
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <h3 className="settings-section-title">Appearance Settings</h3>
+              <p className="settings-section-description">Customize the look and feel of the application</p>
+            </div>
+            <div className="settings-section-body">
+              <div className="form-group">
+                <label className="form-label">Theme</label>
+                <div className="theme-toggle-group">
+                  <button
+                    type="button"
+                    className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
+                    onClick={() => onThemeChange('dark')}
+                  >
+                    <div className="theme-option-icon">🌙</div>
+                    <div className="theme-option-label">Dark</div>
+                  </button>
+                  <button
+                    type="button"
+                    className={`theme-option ${theme === 'light' ? 'active' : ''}`}
+                    onClick={() => onThemeChange('light')}
+                  >
+                    <div className="theme-option-icon">☀️</div>
+                    <div className="theme-option-label">Light</div>
+                  </button>
+                </div>
+                <span className="form-hint">Choose your preferred color theme</span>
+              </div>
+            </div>
+          </div>
         );
       default:
         return null;
