@@ -992,9 +992,45 @@ def send_custom_message_to_webhook(destination, message, webhook_type):
             response = requests.post(webhook_url, json=payload, timeout=10)
             response.raise_for_status()
             return True, None
+    except requests.exceptions.ConnectionError as e:
+        error_str = str(e).lower()
+        if 'name resolution' in error_str or 'failed to resolve' in error_str or 'dns' in error_str:
+            logger.error(f"DNS resolution error for webhook {webhook_url}: {e}")
+            return False, 'Network error: Unable to resolve webhook hostname. Please check your internet connection and DNS settings.'
+        elif 'connection refused' in error_str or 'connection timeout' in error_str:
+            logger.error(f"Connection error for webhook {webhook_url}: {e}")
+            return False, 'Connection error: Unable to connect to webhook server. Please check the webhook URL and your network connection.'
+        else:
+            logger.error(f"Connection error for webhook {webhook_url}: {e}")
+            return False, 'Connection error: Unable to reach webhook server. Please check your network connection.'
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Timeout error for webhook {webhook_url}: {e}")
+        return False, 'Request timeout: The webhook server did not respond in time. Please try again later.'
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP error for webhook {webhook_url}: {e}")
+        status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
+        if status_code == 404:
+            return False, 'Webhook not found (404). Please verify the webhook URL is correct.'
+        elif status_code == 401 or status_code == 403:
+            return False, 'Webhook authentication failed. Please verify the webhook URL is valid and not expired.'
+        elif status_code == 429:
+            return False, 'Rate limit exceeded. Please wait a moment before trying again.'
+        else:
+            return False, f'HTTP error ({status_code or "unknown"}): Webhook server returned an error.'
     except requests.exceptions.RequestException as e:
         logger.error(f"Error posting to webhook {webhook_url}: {e}")
-        return False, f'Failed to post: {str(e)}'
+        # Provide a cleaner error message
+        error_str = str(e)
+        if 'HTTPSConnectionPool' in error_str or 'HTTPConnectionPool' in error_str:
+            # Extract the actual error message
+            if 'Caused by' in error_str:
+                error_str = error_str.split('Caused by')[-1].strip()
+            else:
+                # Try to extract meaningful part
+                parts = error_str.split(':')
+                if len(parts) > 1:
+                    error_str = parts[-1].strip()
+        return False, f'Failed to send message: {error_str}'
 
 
 @app.route('/api/apps/metadata/<app_store_id>', methods=['GET'])
