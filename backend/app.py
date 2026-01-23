@@ -362,22 +362,46 @@ def setup_scheduler():
         
         app_id = app['app_store_id']
         app_uuid = app['id']  # Use the UUID, not app_store_id
+        app_name = app.get('name', 'Unknown')
         interval_override = app.get('interval_override')
         interval_seconds = parse_interval(interval_override) if interval_override else default_interval
+        interval_str = format_interval(interval_seconds)
         
         # Schedule job - use functools.partial to properly capture app_id
         # Wrap in a function to handle errors properly
-        def make_scheduled_check(app_uuid_to_check):
+        def make_scheduled_check(app_uuid_to_check, app_name_to_log, interval_str):
             def scheduled_check():
                 try:
                     logger.debug(f"Running scheduled check for app {app_uuid_to_check}")
+                    # Log scheduler run
+                    app_for_log = storage.get_app(app_uuid_to_check)
+                    app_name = app_for_log.get('name', 'Unknown') if app_for_log else app_name_to_log
+                    storage.add_history_entry(
+                        event_type='scheduler_run',
+                        app_id=app_uuid_to_check,
+                        app_name=app_name,
+                        status='info',
+                        message=f'Scheduled check triggered (interval: {interval_str})',
+                        details={'interval': interval_str, 'triggered_by': 'scheduler'}
+                    )
                     result, status_code = check_app(app_uuid_to_check)
                     logger.debug(f"Scheduled check completed for app {app_uuid_to_check}: {result.get('message', 'Unknown')}")
                 except Exception as e:
                     logger.error(f"Error in scheduled check for app {app_uuid_to_check}: {e}", exc_info=True)
+                    # Log scheduler error
+                    app_for_log = storage.get_app(app_uuid_to_check)
+                    app_name = app_for_log.get('name', 'Unknown') if app_for_log else app_name_to_log
+                    storage.add_history_entry(
+                        event_type='scheduler_run',
+                        app_id=app_uuid_to_check,
+                        app_name=app_name,
+                        status='error',
+                        message=f'Scheduled check failed: {str(e)}',
+                        details={'interval': interval_str, 'triggered_by': 'scheduler', 'error': str(e)}
+                    )
             return scheduled_check
         
-        schedule.every(interval_seconds).seconds.do(make_scheduled_check(app_uuid))
+        schedule.every(interval_seconds).seconds.do(make_scheduled_check(app_uuid, app_name, interval_str))
         scheduled_count += 1
         logger.info(f"Scheduled app {app['name']} ({app_id}) to check every {format_interval(interval_seconds)}")
     
