@@ -47,7 +47,13 @@ class StorageManager:
                 'smtp_user': '',
                 'smtp_password': '',
                 'smtp_from': '',
-                'smtp_use_tls': True
+                'smtp_use_tls': True,
+                'message_format_version_header': '# v{version}',
+                'message_format_section_header': '## {section}',
+                'message_format_bullet': '- ',
+                'message_format_empty_line_between_sections': True,
+                'message_format_no_release_notes': 'No release notes available.',
+                'message_format_include_version_header': True
             }
             self._save_settings(default_settings)
     
@@ -103,7 +109,13 @@ class StorageManager:
             'smtp_user': '',
             'smtp_password': '',
             'smtp_from': '',
-            'smtp_use_tls': True
+            'smtp_use_tls': True,
+            'message_format_version_header': '# v{version}',
+            'message_format_section_header': '## {section}',
+            'message_format_bullet': '- ',
+            'message_format_empty_line_between_sections': True,
+            'message_format_no_release_notes': 'No release notes available.',
+            'message_format_include_version_header': True
         }
         # Merge defaults with loaded settings (loaded settings take precedence)
         return {**defaults, **settings}

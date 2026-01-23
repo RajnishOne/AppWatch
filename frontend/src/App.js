@@ -1597,7 +1597,13 @@ function SettingsPage({ onCancel, message, showMessage, section = 'general', onN
     smtp_from: '',
     smtp_use_tls: true,
     version: '1.8.5',
-    api_key: ''
+    api_key: '',
+    message_format_version_header: '# v{version}',
+    message_format_section_header: '## {section}',
+    message_format_bullet: '- ',
+    message_format_empty_line_between_sections: true,
+    message_format_no_release_notes: 'No release notes available.',
+    message_format_include_version_header: true
   });
   const [apiKey, setApiKey] = useState('');
   const [regeneratingApiKey, setRegeneratingApiKey] = useState(false);
@@ -1608,6 +1614,7 @@ function SettingsPage({ onCancel, message, showMessage, section = 'general', onN
   const settingsSections = [
     { id: 'general', label: 'General' },
     { id: 'webhook', label: 'Webhook' },
+    { id: 'message-format', label: 'Message Format' },
     { id: 'security', label: 'Security' },
     { id: 'appearance', label: 'Appearance' },
   ];
@@ -1891,6 +1898,102 @@ function SettingsPage({ onCancel, message, showMessage, section = 'general', onN
                       Use TLS for SMTP
                     </label>
                   </div>
+                </div>
+              </div>
+            </div>
+        );
+      case 'message-format':
+        return (
+          <div className="settings-section">
+            <div className="settings-section-header">
+              <h3 className="settings-section-title">Message Format Settings</h3>
+              <p className="settings-section-description">Customize how release notes are formatted in webhook messages</p>
+            </div>
+            <div className="settings-section-body">
+                <div className="form-group">
+                  <div className="form-checkbox-group">
+                    <input
+                      type="checkbox"
+                      id="message_format_include_version_header"
+                      name="message_format_include_version_header"
+                      checked={settings.message_format_include_version_header !== false}
+                      onChange={handleChange}
+                      className="form-checkbox"
+                    />
+                    <label htmlFor="message_format_include_version_header" className="form-checkbox-label">
+                      Include Version Header
+                    </label>
+                  </div>
+                  <span className="form-hint">Show version header at the top of messages</span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Version Header Format</label>
+                  <input
+                    type="text"
+                    name="message_format_version_header"
+                    value={settings.message_format_version_header || '# v{version}'}
+                    onChange={handleChange}
+                    placeholder="# v{version}"
+                    className="form-input"
+                  />
+                  <span className="form-hint">Format for version header. Use {`{version}`} as placeholder. Examples: "# v{version}", "Version {version}", "**v{version}**"</span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Section Header Format</label>
+                  <input
+                    type="text"
+                    name="message_format_section_header"
+                    value={settings.message_format_section_header || '## {section}'}
+                    onChange={handleChange}
+                    placeholder="## {section}"
+                    className="form-input"
+                  />
+                  <span className="form-hint">Format for section headers (New, Fixed, etc.). Use {`{section}`} as placeholder. Examples: "## {section}", "**{section}**", "{section}:"</span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Bullet Point Style</label>
+                  <input
+                    type="text"
+                    name="message_format_bullet"
+                    value={settings.message_format_bullet || '- '}
+                    onChange={handleChange}
+                    placeholder="- "
+                    className="form-input"
+                  />
+                  <span className="form-hint">Bullet character(s) for list items. Examples: "- ", "* ", "• ", "→ "</span>
+                </div>
+
+                <div className="form-group">
+                  <div className="form-checkbox-group">
+                    <input
+                      type="checkbox"
+                      id="message_format_empty_line_between_sections"
+                      name="message_format_empty_line_between_sections"
+                      checked={settings.message_format_empty_line_between_sections !== false}
+                      onChange={handleChange}
+                      className="form-checkbox"
+                    />
+                    <label htmlFor="message_format_empty_line_between_sections" className="form-checkbox-label">
+                      Empty Line Between Sections
+                    </label>
+                  </div>
+                  <span className="form-hint">Add blank lines between different sections (New, Fixed, etc.)</span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">No Release Notes Text</label>
+                  <input
+                    type="text"
+                    name="message_format_no_release_notes"
+                    value={settings.message_format_no_release_notes || 'No release notes available.'}
+                    onChange={handleChange}
+                    placeholder="No release notes available."
+                    className="form-input"
+                  />
+                  <span className="form-hint">Text to display when release notes are empty</span>
                 </div>
               </div>
             </div>

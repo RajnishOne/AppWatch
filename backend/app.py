@@ -42,9 +42,9 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Initialize components
 storage = StorageManager(Path('/data'))
-formatter = DiscordFormatter()
-# Load settings for notification handler
+# Load settings for formatter and notification handler
 settings = storage.get_settings()
+formatter = DiscordFormatter(settings)
 monitor = AppStoreMonitor(storage, formatter, settings)
 
 # Global scheduler thread
@@ -223,10 +223,11 @@ def check_app(app_id):
             return {'message': 'App is disabled'}, 200
         
         # Ensure monitor has latest settings (in case they changed)
-        global monitor
+        global monitor, formatter
         current_settings = storage.get_settings()
         if monitor.settings != current_settings:
             logger.debug("Reloading monitor with updated settings")
+            formatter = DiscordFormatter(current_settings)
             monitor = AppStoreMonitor(storage, formatter, current_settings)
         
         app_name = app.get('name', 'Unknown')
@@ -920,8 +921,9 @@ def update_settings():
         if 'default_interval' in data:
             setup_scheduler()
         
-        # Reload monitor with new settings
-        global monitor
+        # Reload formatter and monitor with new settings
+        global monitor, formatter
+        formatter = DiscordFormatter(current_settings)
         monitor = AppStoreMonitor(storage, formatter, current_settings)
         
         # If auto_post_on_update setting changed, reschedule to ensure monitor has latest settings
@@ -943,8 +945,9 @@ except Exception as e:
 # Reload monitor when settings change (helper function)
 def reload_monitor():
     """Reload monitor with current settings"""
-    global monitor
+    global monitor, formatter
     current_settings = storage.get_settings()
+    formatter = DiscordFormatter(current_settings)
     monitor = AppStoreMonitor(storage, formatter, current_settings)
 
 if __name__ == '__main__':
