@@ -2712,7 +2712,7 @@ function SendWebhookPage({ onCancel, message, showMessage }) {
                     className={`form-input ${errors.message ? 'error' : ''}`}
                     style={{ resize: 'vertical' }}
                   />
-                  <span className="form-hint">You can send a simple word like "hello" or a full paragraph.</span>
+                  <span className="form-hint">Write your message here...</span>
                   {errors.message && <span className="form-error">{errors.message}</span>}
                 </div>
               </div>
