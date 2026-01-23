@@ -816,6 +816,187 @@ def post_app_endpoint(app_id):
     return jsonify(result), status_code
 
 
+@app.route('/api/webhooks/list', methods=['GET'])
+@require_auth(storage)
+def list_webhooks():
+    """Get all webhooks from all apps for selection"""
+    try:
+        apps = load_apps()
+        webhooks = []
+        
+        for app in apps:
+            app_name = app.get('name', 'Unknown')
+            notification_destinations = app.get('notification_destinations', [])
+            
+            # Support legacy webhook_url
+            if not notification_destinations and app.get('webhook_url'):
+                notification_destinations = [{
+                    'type': 'discord',
+                    'webhook_url': app['webhook_url']
+                }]
+            
+            for dest in notification_destinations:
+                dest_type = dest.get('type', '').lower()
+                webhook_url = dest.get('webhook_url', '').strip()
+                
+                # Only include webhook-based destinations
+                if dest_type in ['discord', 'slack', 'teams', 'generic'] and webhook_url:
+                    webhooks.append({
+                        'id': f"{app['id']}_{len(webhooks)}",
+                        'app_name': app_name,
+                        'app_id': app['id'],
+                        'type': dest_type,
+                        'webhook_url': webhook_url,
+                        'label': f"{app_name} - {dest_type.capitalize()}"
+                    })
+        
+        return jsonify({'webhooks': webhooks})
+    except Exception as e:
+        logger.error(f"Error listing webhooks: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to list webhooks'}), 500
+
+
+@app.route('/api/webhooks/send', methods=['POST'])
+@require_auth(storage)
+def send_custom_webhook():
+    """Send custom message to webhook(s)"""
+    if not request.json:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    
+    data = request.json
+    message = data.get('message', '').strip()
+    webhook_urls = data.get('webhook_urls', [])
+    
+    if not message:
+        return jsonify({'error': 'Message is required'}), 400
+    
+    if not webhook_urls or not isinstance(webhook_urls, list) or len(webhook_urls) == 0:
+        return jsonify({'error': 'At least one webhook URL is required'}), 400
+    
+    # Validate webhook URLs
+    for url in webhook_urls:
+        if not isinstance(url, str) or not url.strip():
+            return jsonify({'error': 'Invalid webhook URL'}), 400
+        if not url.startswith('http://') and not url.startswith('https://'):
+            return jsonify({'error': 'Webhook URL must start with http:// or https://'}), 400
+    
+    try:
+        success_count = 0
+        error_messages = []
+        results = []
+        
+        for webhook_url in webhook_urls:
+            webhook_url = webhook_url.strip()
+            
+            # Determine webhook type from URL
+            webhook_type = 'generic'
+            if webhook_url.startswith('https://discord.com/api/webhooks/'):
+                webhook_type = 'discord'
+            elif webhook_url.startswith('https://hooks.slack.com/'):
+                webhook_type = 'slack'
+            elif 'office.com' in webhook_url or 'office365' in webhook_url:
+                webhook_type = 'teams'
+            
+            # Create destination object
+            destination = {
+                'type': webhook_type,
+                'webhook_url': webhook_url
+            }
+            
+            # Send message using NotificationHandler
+            # For custom messages, we'll send the message directly as content
+            success, error_msg = send_custom_message_to_webhook(destination, message, webhook_type)
+            
+            if success:
+                success_count += 1
+                results.append({'webhook_url': webhook_url, 'status': 'success'})
+            else:
+                error_messages.append(f"{webhook_url}: {error_msg or 'Failed'}")
+                results.append({'webhook_url': webhook_url, 'status': 'error', 'error': error_msg})
+        
+        # Log the broadcast
+        storage.add_history_entry(
+            event_type='webhook_broadcast',
+            app_id=None,
+            app_name='Custom Message',
+            status='success' if success_count > 0 else 'error',
+            message=f'Custom message sent to {success_count} webhook(s)',
+            details={
+                'message': message,
+                'success_count': success_count,
+                'failed_count': len(error_messages),
+                'total_webhooks': len(webhook_urls),
+                'results': results
+            }
+        )
+        
+        if success_count > 0:
+            response_message = f'Message sent to {success_count} webhook(s)'
+            if error_messages:
+                response_message += f' ({len(error_messages)} failed)'
+            return jsonify({
+                'success': True,
+                'message': response_message,
+                'success_count': success_count,
+                'failed_count': len(error_messages),
+                'results': results
+            })
+        else:
+            error_msg = 'Failed to send to any webhook'
+            if error_messages:
+                error_msg = '; '.join(error_messages[:3])  # Limit error messages
+            return jsonify({
+                'success': False,
+                'error': error_msg,
+                'success_count': 0,
+                'failed_count': len(error_messages),
+                'results': results
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error sending custom webhook message: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+def send_custom_message_to_webhook(destination, message, webhook_type):
+    """Send custom message to a webhook destination"""
+    webhook_url = destination.get('webhook_url', '').strip()
+    if not webhook_url:
+        return False, 'Webhook URL is required'
+    
+    try:
+        if webhook_type == 'discord':
+            payload = {'content': message}
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+            return True, None
+        elif webhook_type == 'slack':
+            payload = {'text': message}
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+            return True, None
+        elif webhook_type == 'teams':
+            payload = {
+                '@type': 'MessageCard',
+                '@context': 'https://schema.org/extensions',
+                'summary': 'Custom Message',
+                'themeColor': '0078D4',
+                'title': 'Custom Message',
+                'text': message
+            }
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+            return True, None
+        else:  # generic
+            payload = {'message': message, 'content': message}
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+            return True, None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error posting to webhook {webhook_url}: {e}")
+        return False, f'Failed to post: {str(e)}'
+
+
 @app.route('/api/apps/metadata/<app_store_id>', methods=['GET'])
 @require_auth(storage)
 def get_app_metadata(app_store_id):
