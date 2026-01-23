@@ -18,6 +18,7 @@ class AppStoreMonitor:
     def __init__(self, storage, formatter, settings=None):
         self.storage = storage
         self.formatter = formatter
+        self.settings = settings or {}
         self.notifier = NotificationHandler(settings)
     
     def fetch_app_info(self, app_store_id):
@@ -116,7 +117,23 @@ class AppStoreMonitor:
                     'formatted_preview': self.formatter.format_release_notes(current_version, release_notes)
                 }
             
-            # New version detected - post to all configured destinations
+            # New version detected - check if auto-post is enabled
+            auto_post_enabled = self.settings.get('auto_post_on_update', False)
+            
+            if not auto_post_enabled:
+                # Auto-post is disabled, just return the new version info without posting
+                logger.info(f"New version {current_version} detected for app {app_id}, but auto-post is disabled")
+                return {
+                    'success': True,
+                    'message': 'New version detected (auto-post disabled)',
+                    'current_version': current_version,
+                    'last_version': last_version,
+                    'checked_at': datetime.now().isoformat(),
+                    'formatted_preview': self.formatter.format_release_notes(current_version, release_notes),
+                    'auto_post_disabled': True
+                }
+            
+            # Auto-post is enabled - post to all configured destinations
             formatted_notes = self.formatter.format_release_notes(current_version, release_notes)
             app_name = app.get('name', 'App')
             

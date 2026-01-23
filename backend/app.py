@@ -222,6 +222,13 @@ def check_app(app_id):
         if not app.get('enabled', True):
             return {'message': 'App is disabled'}, 200
         
+        # Ensure monitor has latest settings (in case they changed)
+        global monitor
+        current_settings = storage.get_settings()
+        if monitor.settings != current_settings:
+            logger.debug("Reloading monitor with updated settings")
+            monitor = AppStoreMonitor(storage, formatter, current_settings)
+        
         app_name = app.get('name', 'Unknown')
         result = monitor.check_app(app)
         
@@ -324,10 +331,16 @@ def run_scheduler():
     """Run the scheduler loop"""
     global scheduler_running
     scheduler_running = True
+    logger.info("Scheduler loop started")
     
     while scheduler_running:
-        schedule.run_pending()
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            logger.error(f"Error running scheduled job: {e}", exc_info=True)
         time.sleep(60)  # Check every minute
+    
+    logger.info("Scheduler loop stopped")
 
 
 def setup_scheduler():
@@ -336,27 +349,47 @@ def setup_scheduler():
     
     # Clear existing jobs
     schedule.clear()
+    logger.info("Cleared existing scheduled jobs")
     
     apps = load_apps()
     default_interval = get_default_interval()
     
+    scheduled_count = 0
     for app in apps:
         if not app.get('enabled', True):
+            logger.debug(f"Skipping disabled app: {app.get('name', 'Unknown')}")
             continue
         
         app_id = app['app_store_id']
+        app_uuid = app['id']  # Use the UUID, not app_store_id
         interval_override = app.get('interval_override')
         interval_seconds = parse_interval(interval_override) if interval_override else default_interval
         
         # Schedule job - use functools.partial to properly capture app_id
-        schedule.every(interval_seconds).seconds.do(partial(check_app, app['id']))
+        # Wrap in a function to handle errors properly
+        def make_scheduled_check(app_uuid_to_check):
+            def scheduled_check():
+                try:
+                    logger.debug(f"Running scheduled check for app {app_uuid_to_check}")
+                    result, status_code = check_app(app_uuid_to_check)
+                    logger.debug(f"Scheduled check completed for app {app_uuid_to_check}: {result.get('message', 'Unknown')}")
+                except Exception as e:
+                    logger.error(f"Error in scheduled check for app {app_uuid_to_check}: {e}", exc_info=True)
+            return scheduled_check
+        
+        schedule.every(interval_seconds).seconds.do(make_scheduled_check(app_uuid))
+        scheduled_count += 1
         logger.info(f"Scheduled app {app['name']} ({app_id}) to check every {format_interval(interval_seconds)}")
+    
+    logger.info(f"Total apps scheduled: {scheduled_count}")
     
     # Start scheduler thread if not running
     if scheduler_thread is None or not scheduler_thread.is_alive():
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
         logger.info("Scheduler thread started")
+    else:
+        logger.info("Scheduler thread already running")
 
 
 # API Routes
@@ -494,11 +527,24 @@ def serve_frontend(path):
 @require_auth(storage)
 def status():
     """Health check endpoint"""
+    global scheduler_thread
+    
+    # Check if scheduler thread is alive, restart if needed
+    scheduler_alive = scheduler_thread is not None and scheduler_thread.is_alive()
+    if not scheduler_alive and scheduler_running:
+        logger.warning("Scheduler thread died, restarting...")
+        try:
+            setup_scheduler()
+        except Exception as e:
+            logger.error(f"Failed to restart scheduler: {e}", exc_info=True)
+    
     return jsonify({
         'status': 'ok',
         'version': APP_VERSION,
         'timestamp': datetime.now().isoformat(),
-        'scheduler_running': scheduler_running
+        'scheduler_running': scheduler_running,
+        'scheduler_thread_alive': scheduler_alive,
+        'scheduled_jobs_count': len(schedule.jobs)
     })
 
 
@@ -853,6 +899,9 @@ def update_settings():
         # Reload monitor with new settings
         global monitor
         monitor = AppStoreMonitor(storage, formatter, current_settings)
+        
+        # If auto_post_on_update setting changed, reschedule to ensure monitor has latest settings
+        setup_scheduler()
         
         return jsonify(current_settings)
     except Exception as e:
