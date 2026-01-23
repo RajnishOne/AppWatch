@@ -1959,7 +1959,7 @@ function SettingsPage({ onCancel, message, showMessage, section = 'general', onN
                     placeholder="# v{version}"
                     className="form-input"
                   />
-                  <span className="form-hint">Format for version header. Use {`{version}`} as placeholder. Examples: "# v{version}", "Version {version}", "**v{version}**"</span>
+                  <span className="form-hint">Format for version header. Use {'{version}'} as placeholder. Examples: "# v{'{version}'}", "Version {'{version}'}", "**v{'{version}'}**"</span>
                 </div>
 
                 <div className="form-group">
