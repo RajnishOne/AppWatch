@@ -3,8 +3,11 @@ App Store API integration
 """
 import logging
 import requests
+import time
 from datetime import datetime
 from pathlib import Path
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from backend.notifier import NotificationHandler
 
 logger = logging.getLogger(__name__)
@@ -14,52 +17,87 @@ class AppStoreMonitor:
     """Monitor App Store apps for new releases"""
     
     ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2  # seconds
     
     def __init__(self, storage, formatter, settings=None):
         self.storage = storage
         self.formatter = formatter
+        self.settings = settings or {}
         self.notifier = NotificationHandler(settings)
+        
+        # Setup session with retry strategy
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=self.MAX_RETRIES,
+            backoff_factor=self.RETRY_DELAY,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
     
     def fetch_app_info(self, app_store_id):
-        """Fetch app information from iTunes Lookup API"""
-        try:
-            params = {
-                'id': app_store_id,
-                'country': 'us'  # Default to US store
-            }
-            
-            response = requests.get(self.ITUNES_LOOKUP_URL, params=params, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if data.get('resultCount', 0) == 0:
-                return None
-            
-            app_info = data['results'][0]
-            
-            # Get artwork URL - prefer higher resolution, fallback to lower
-            artwork_url = (
-                app_info.get('artworkUrl512') or 
-                app_info.get('artworkUrl100') or 
-                app_info.get('artworkUrl60') or
-                None
-            )
-            
-            return {
-                'version': app_info.get('version'),
-                'releaseNotes': app_info.get('releaseNotes', ''),
-                'bundleId': app_info.get('bundleId'),
-                'trackName': app_info.get('trackName'),
-                'artistName': app_info.get('artistName'),
-                'artworkUrl': artwork_url
-            }
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching app info for {app_store_id}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error fetching app info: {e}", exc_info=True)
-            raise
+        """Fetch app information from iTunes Lookup API with retry logic"""
+        params = {
+            'id': app_store_id,
+            'country': 'us'  # Default to US store
+        }
+        
+        last_exception = None
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                response = self.session.get(
+                    self.ITUNES_LOOKUP_URL, 
+                    params=params, 
+                    timeout=10
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                if data.get('resultCount', 0) == 0:
+                    return None
+                
+                app_info = data['results'][0]
+                
+                # Get artwork URL - prefer higher resolution, fallback to lower
+                artwork_url = (
+                    app_info.get('artworkUrl512') or 
+                    app_info.get('artworkUrl100') or 
+                    app_info.get('artworkUrl60') or
+                    None
+                )
+                
+                return {
+                    'version': app_info.get('version'),
+                    'releaseNotes': app_info.get('releaseNotes', ''),
+                    'bundleId': app_info.get('bundleId'),
+                    'trackName': app_info.get('trackName'),
+                    'artistName': app_info.get('artistName'),
+                    'artworkUrl': artwork_url
+                }
+            except (requests.exceptions.ConnectionError, 
+                    requests.exceptions.Timeout,
+                    requests.exceptions.RequestException) as e:
+                last_exception = e
+                if attempt < self.MAX_RETRIES:
+                    wait_time = self.RETRY_DELAY * (2 ** attempt)  # Exponential backoff
+                    logger.warning(
+                        f"Attempt {attempt + 1}/{self.MAX_RETRIES + 1} failed for app {app_store_id}: {e}. "
+                        f"Retrying in {wait_time}s..."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"All {self.MAX_RETRIES + 1} attempts failed for app {app_store_id}: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error fetching app info for {app_store_id}: {e}", exc_info=True)
+                raise
+        
+        # If we exhausted all retries, raise the last exception
+        if last_exception:
+            raise last_exception
     
     def check_app(self, app):
         """Check app for new version and post if needed"""
@@ -116,7 +154,23 @@ class AppStoreMonitor:
                     'formatted_preview': self.formatter.format_release_notes(current_version, release_notes)
                 }
             
-            # New version detected - post to all configured destinations
+            # New version detected - check if auto-post is enabled
+            auto_post_enabled = self.settings.get('auto_post_on_update', False)
+            
+            if not auto_post_enabled:
+                # Auto-post is disabled, just return the new version info without posting
+                logger.info(f"New version {current_version} detected for app {app_id}, but auto-post is disabled")
+                return {
+                    'success': True,
+                    'message': 'New version detected (auto-post disabled)',
+                    'current_version': current_version,
+                    'last_version': last_version,
+                    'checked_at': datetime.now().isoformat(),
+                    'formatted_preview': self.formatter.format_release_notes(current_version, release_notes),
+                    'auto_post_disabled': True
+                }
+            
+            # Auto-post is enabled - post to all configured destinations
             formatted_notes = self.formatter.format_release_notes(current_version, release_notes)
             app_name = app.get('name', 'App')
             

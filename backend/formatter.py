@@ -22,9 +22,17 @@ class DiscordFormatter:
         r'^changes?\s*:?\s*$',
     ]
     
-    def __init__(self):
+    def __init__(self, settings=None):
         # Compile regex patterns
         self.section_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in self.SECTION_HEADERS]
+        # Load formatting settings
+        self.settings = settings or {}
+        self.version_header_template = self.settings.get('message_format_version_header', '# v{version}')
+        self.section_header_template = self.settings.get('message_format_section_header', '## {section}')
+        self.bullet = self.settings.get('message_format_bullet', '- ')
+        self.empty_line_between_sections = self.settings.get('message_format_empty_line_between_sections', True)
+        self.no_release_notes_text = self.settings.get('message_format_no_release_notes', 'No release notes available.')
+        self.include_version_header = self.settings.get('message_format_include_version_header', True)
     
     def format_release_notes(self, version, release_notes):
         """
@@ -35,7 +43,10 @@ class DiscordFormatter:
         - Case B: Structured sections
         """
         if not release_notes:
-            return f"# v{version}\n\nNo release notes available."
+            version_header = self.version_header_template.format(version=version) if self.include_version_header else ""
+            if version_header:
+                return f"{version_header}\n\n{self.no_release_notes_text}"
+            return self.no_release_notes_text
         
         # Clean up markdown from App Store
         cleaned = self._strip_app_store_markdown(release_notes)
@@ -116,33 +127,63 @@ class DiscordFormatter:
     
     def _format_structured(self, version, sections):
         """Format structured sections (Case B)"""
-        parts = [f"# v{version}", ""]
+        parts = []
         
+        # Add version header if enabled
+        if self.include_version_header:
+            version_header = self.version_header_template.format(version=version)
+            parts.append(version_header)
+            parts.append("")
+        
+        first_section = True
         for section_name, items in sections.items():
-            parts.append(f"## {section_name}")
+            # Add empty line before section (except first)
+            if not first_section and self.empty_line_between_sections:
+                parts.append("")
             
+            # Add section header
+            section_header = self.section_header_template.format(section=section_name)
+            parts.append(section_header)
+            
+            # Add items with configured bullet style
             for item in items:
-                # Ensure items start with bullet
                 item_clean = item.strip()
-                if not item_clean.startswith('-'):
-                    item_clean = f"- {item_clean}"
+                # Check if item already starts with a bullet-like character
+                if not (item_clean.startswith('-') or item_clean.startswith('*') or item_clean.startswith('•')):
+                    item_clean = f"{self.bullet}{item_clean}"
+                else:
+                    # Replace existing bullet with configured one
+                    item_clean = self.bullet + item_clean.lstrip('-*•').strip()
                 parts.append(item_clean)
             
-            parts.append("")  # Empty line between sections
+            if self.empty_line_between_sections:
+                parts.append("")  # Empty line after section
+            
+            first_section = False
         
         return '\n'.join(parts).strip()
     
     def _format_generic(self, version, text):
         """Format generic release text (Case A) - simple bullet list"""
         lines = text.split('\n')
-        parts = [f"# v{version}", ""]
+        parts = []
+        
+        # Add version header if enabled
+        if self.include_version_header:
+            version_header = self.version_header_template.format(version=version)
+            parts.append(version_header)
+            parts.append("")
         
         # Convert all non-empty lines to bullets
         for line in lines:
             line = line.strip()
             if line:
-                if not line.startswith('-'):
-                    line = f"- {line}"
+                # Check if line already starts with a bullet-like character
+                if not (line.startswith('-') or line.startswith('*') or line.startswith('•')):
+                    line = f"{self.bullet}{line}"
+                else:
+                    # Replace existing bullet with configured one
+                    line = self.bullet + line.lstrip('-*•').strip()
                 parts.append(line)
         
         return '\n'.join(parts).strip()
