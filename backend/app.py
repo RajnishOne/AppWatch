@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 import requests
 import schedule
@@ -743,6 +743,29 @@ def post_app_endpoint(app_id):
     """Manually post release notes to all configured notification destinations"""
     result, status_code = post_to_discord(app_id)
     return jsonify(result), status_code
+
+
+@app.route('/api/apps/<app_id>/icon', methods=['GET'])
+@require_auth(storage)
+def get_app_icon(app_id):
+    """Serve app icon from stored icon_url (proxied from server to avoid client using Apple URLs)."""
+    app = storage.get_app(app_id)
+    if not app:
+        return jsonify({'error': 'App not found'}), 404
+    icon_url = app.get('icon_url')
+    if not icon_url or not icon_url.strip():
+        return jsonify({'error': 'No icon'}), 404
+    try:
+        resp = requests.get(icon_url, timeout=10, stream=True)
+        resp.raise_for_status()
+        content_type = resp.headers.get('Content-Type', 'image/png')
+        # Restrict to image types
+        if not content_type.startswith('image/'):
+            content_type = 'image/png'
+        return Response(resp.iter_content(chunk_size=8192), mimetype=content_type)
+    except Exception as e:
+        logger.warning(f"Could not fetch icon for app {app_id}: {e}")
+        return jsonify({'error': 'Could not load icon'}), 404
 
 
 @app.route('/api/apps/metadata/<app_store_id>', methods=['GET'])
